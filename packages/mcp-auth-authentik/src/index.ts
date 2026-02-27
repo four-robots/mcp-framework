@@ -225,10 +225,21 @@ export class AuthentikAuth extends OAuthProvider {
 
   constructor(config: AuthentikConfig) {
     super();
+
+    const DEFAULT_SECRET = 'authentik-secret-change-me';
+    const sessionSecret = config.sessionSecret || DEFAULT_SECRET;
+
+    if (sessionSecret === DEFAULT_SECRET) {
+      console.warn(
+        '[mcp-auth-authentik] WARNING: Using default session secret. ' +
+        'This is insecure for production. Set a strong, unique sessionSecret in your AuthentikConfig.'
+      );
+    }
+
     this.config = {
       scopes: ['openid', 'profile', 'email'],
       applicationSlug: config.clientId,
-      sessionSecret: config.sessionSecret || 'authentik-secret-change-me',
+      sessionSecret,
       ...config
     };
   }

@@ -37,6 +37,18 @@
     },
     {
       "path": "./packages/mcp-rate-limit"
+    },
+    {
+      "path": "./packages/mcp-transport-sse"
+    },
+    {
+      "path": "./packages/mcp-client"
+    },
+    {
+      "path": "./packages/mcp-client-http"
+    },
+    {
+      "path": "./packages/mcp-client-stdio"
     }
   ],
   "exclude": [
