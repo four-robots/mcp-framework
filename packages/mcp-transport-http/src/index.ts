@@ -237,7 +237,15 @@ export class HttpTransport implements Transport {
 
           // Connect the MCP server to this transport
           const sdkServer = this.mcpServer!.getSDKServer();
-          await sdkServer.connect(transport);
+          try {
+            await sdkServer.connect(transport);
+          } catch (connectError) {
+            // Clean up the broken transport on connect failure
+            if (transport.sessionId) {
+              delete this.transports[transport.sessionId];
+            }
+            throw connectError;
+          }
         }
 
         // Update server context with user info if available

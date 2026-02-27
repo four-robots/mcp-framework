@@ -75,29 +75,38 @@ export class SSETransport implements Transport {
 
     // SSE endpoint for server-to-client messages
     this.app.get(basePath + "sse", async (req: Request, res: Response) => {
+      const sessionId = randomUUID();
+      let connected = false;
+
       try {
         // Create SSE transport
-        const sessionId = randomUUID();
         const transport = new SSEServerTransport("/messages", res);
-        
+
         this.transports.set(sessionId, transport);
-        
+
         // Send session ID as first event
         res.write(`data: ${JSON.stringify({ sessionId })}\n\n`);
-        
+
         // Clean up on disconnect
         res.on("close", () => {
+          connected = false;
           this.transports.delete(sessionId);
         });
 
         // Connect MCP server
         const sdkServer = this.mcpServer!.getSDKServer();
         await sdkServer.connect(transport);
-        
+        connected = true;
+
       } catch (error) {
+        // Clean up transport on connect failure
+        this.transports.delete(sessionId);
         console.error("SSE connection failed:", error);
         if (!res.headersSent) {
           res.status(500).send("SSE connection failed");
+        } else {
+          // Headers already sent (SSE stream started), end the response
+          res.end();
         }
       }
     });
@@ -106,11 +115,19 @@ export class SSETransport implements Transport {
     this.app.post(basePath + "messages", async (req: Request, res: Response) => {
       try {
         const sessionId = req.query.sessionId as string;
+
+        // Validate sessionId format (must be a valid UUID)
+        if (!sessionId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
+          return res.status(400).json({
+            error: "Invalid or missing session ID"
+          });
+        }
+
         const transport = this.transports.get(sessionId);
-        
+
         if (!transport) {
           return res.status(400).json({
-            error: "Invalid session ID"
+            error: "Unknown session ID"
           });
         }
 

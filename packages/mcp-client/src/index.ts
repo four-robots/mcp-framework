@@ -282,18 +282,20 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
       }
 
       // Set up progress handling
+      let unsubscribeProgress: (() => void) | undefined;
       if (options?.onProgress) {
-        const unsubscribe = this.subscribeToProgress(options.onProgress);
-        // Clean up after request completes
-        options.cancellationToken?.onCancelled(() => unsubscribe());
+        unsubscribeProgress = this.subscribeToProgress(options.onProgress);
+        options.cancellationToken?.onCancelled(() => unsubscribeProgress?.());
       }
 
-      const result = await this.doCallTool(name, args, options, requestId);
-      
-      // Clean up
-      this.activeRequests.delete(requestId);
-      
-      return result;
+      try {
+        const result = await this.doCallTool(name, args, options, requestId);
+        return result;
+      } finally {
+        // Clean up progress subscription and active request
+        unsubscribeProgress?.();
+        this.activeRequests.delete(requestId);
+      }
     } catch (error) {
       this.stats.errorCount++;
       throw error;
@@ -488,6 +490,7 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
    * Start heartbeat mechanism
    */
   protected startHeartbeat(): void {
+    this.stopHeartbeat();
     if (this.config.heartbeatInterval > 0) {
       this.heartbeatTimer = setInterval(() => {
         this.sendHeartbeat().catch(err => {
@@ -520,13 +523,20 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
     }
-    
-    const delay = this.config.retryDelay * Math.pow(2, this.stats.reconnectCount);
-    
+
+    // Cap max delay at 60 seconds
+    const maxDelay = 60000;
+    const delay = Math.min(
+      this.config.retryDelay * Math.pow(2, this.stats.reconnectCount),
+      maxDelay
+    );
+
     this.reconnectTimer = setTimeout(async () => {
       try {
         this.stats.reconnectCount++;
         await this.connect();
+        // Reset reconnect count on successful reconnect
+        this.stats.reconnectCount = 0;
       } catch (error) {
         console.error('Reconnection failed:', error);
         if (this.stats.reconnectCount < this.config.maxRetries) {
