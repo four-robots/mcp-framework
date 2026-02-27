@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { ResourceMetadata, McpServer as SDKMcpServer, ToolCallback, ResourceTemplate as SDKResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol";
 import { CallToolResult, ServerNotification, ServerRequest, CompleteRequestSchema, CreateMessageRequestSchema, CompleteResult, CreateMessageResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
-import { z, ZodRawShape, ZodTypeAny } from "zod";
+import { z } from "zod";
 import { MCPErrorFactory, MCPErrorClass, MCPError, MCPErrorCode } from "./errors.js";
 import { SdkToolConfig, SdkToolResult } from "./tools.js";
 
@@ -61,13 +61,10 @@ export interface PromptListChangedNotification {
   params?: {};
 }
 
-export interface InputArgs extends ZodRawShape { }
-export interface OutputArgs extends ZodRawShape { }
-
-export type ToolModule<ToolInputs extends InputArgs = InputArgs> = {
+export type ToolModule<Schema extends z.AnyZodObject = z.AnyZodObject> = {
   name: string;
-  config: ToolConfig<ToolInputs>;
-  handler: ToolHandler<ToolInputs>;
+  config: ToolConfig<Schema>;
+  handler: ToolHandler<Schema>;
 };
 
 /**
@@ -414,18 +411,18 @@ export class SessionManager {
 /**
  * Tool handler function type
  */
-export type ToolHandler<InputArgs extends ZodRawShape> = (
-  args: z.infer<z.ZodObject<InputArgs>>,
+export type ToolHandler<Schema extends z.AnyZodObject = z.AnyZodObject> = (
+  args: z.infer<Schema>,
   context: ToolContext
 ) => Promise<SdkToolResult>;
 
 /**
  * Tool configuration
  */
-export interface ToolConfig<InputArgs extends ZodRawShape> {
+export interface ToolConfig<Schema extends z.AnyZodObject = z.AnyZodObject> {
   title?: string;
   description: string;
-  inputSchema: z.ZodObject<InputArgs>; // Must be a Zod schema object
+  inputSchema: Schema;
 }
 
 /**
@@ -930,11 +927,11 @@ export interface ServerConfig {
 /**
  * Tool information
  */
-export interface ToolInfo<ToolInputs extends InputArgs = InputArgs> {
+export interface ToolInfo<Schema extends z.AnyZodObject = z.AnyZodObject> {
   name: string;
   title?: string;
   description: string;
-  inputSchema: z.ZodObject<ToolInputs>;
+  inputSchema: Schema;
 }
 
 /**
@@ -1013,7 +1010,7 @@ export class MCPServer {
   private started = false;
 
   // Track registered items for introspection
-  private tools: Map<string, ToolInfo<InputArgs>> = new Map();
+  private tools: Map<string, ToolInfo> = new Map();
   private resources: Map<string, ResourceInfo> = new Map();
   private resourceTemplates: Map<string, ResourceTemplateInfo> = new Map();
   private prompts: Map<string, PromptInfo> = new Map();
@@ -1283,20 +1280,20 @@ export class MCPServer {
     return this.sessionManager.getSessionStats();
   }
 
-  registerTool<ToolInputs extends InputArgs>(
-    toolModule: ToolModule<ToolInputs>
+  registerTool<Schema extends z.AnyZodObject>(
+    toolModule: ToolModule<Schema>
   ): void;
 
-  registerTool<ToolInputs extends InputArgs>(
+  registerTool<Schema extends z.AnyZodObject>(
     name: string,
-    config: ToolConfig<ToolInputs>,
-    handler: ToolHandler<ToolInputs>
+    config: ToolConfig<Schema>,
+    handler: ToolHandler<Schema>
   ): void;
 
-  registerTool<ToolInputs extends InputArgs>(
-    nameOrModule: string | ToolModule<ToolInputs>,
-    maybeConfig?: ToolConfig<ToolInputs>,
-    maybeHandler?: ToolHandler<ToolInputs>
+  registerTool<Schema extends z.AnyZodObject>(
+    nameOrModule: string | ToolModule<Schema>,
+    maybeConfig?: ToolConfig<Schema>,
+    maybeHandler?: ToolHandler<Schema>
   ): void {
     // First check if nameOrModule is a valid string for the legacy API
     if (typeof nameOrModule === 'string') {
@@ -1337,10 +1334,10 @@ export class MCPServer {
     this.registerToolInternal(name, config, handler);
   }
 
-  private registerToolInternal<ToolInputs extends InputArgs>(
+  private registerToolInternal<Schema extends z.AnyZodObject>(
     name: string,
-    config: ToolConfig<ToolInputs>,
-    handler: ToolHandler<ToolInputs>
+    config: ToolConfig<Schema>,
+    handler: ToolHandler<Schema>
   ): void {
 
     // Check for duplicates
@@ -1366,7 +1363,7 @@ export class MCPServer {
       inputSchema: config.inputSchema,
     });
 
-    const toolConfig: SdkToolConfig<ToolInputs> = {
+    const toolConfig: SdkToolConfig = {
       description: config.description,
       inputSchema: config.inputSchema.shape,
     };
@@ -2938,5 +2935,5 @@ export {
 export type { MCPError } from "./errors.js";
 
 // Tool type for external use
-export type Tool<InputArgs extends ZodRawShape = ZodRawShape> = ToolConfig<InputArgs>;
+export type Tool<Schema extends z.AnyZodObject = z.AnyZodObject> = ToolConfig<Schema>;
 
