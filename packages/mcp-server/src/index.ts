@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { ResourceMetadata, McpServer as SDKMcpServer, ToolCallback, ResourceTemplate as SDKResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol";
 import { CallToolResult, ServerNotification, ServerRequest, CompleteRequestSchema, CreateMessageRequestSchema, CompleteResult, CreateMessageResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
@@ -1090,12 +1091,7 @@ export class MCPServer {
    * Generate a secure random secret for cursor HMAC
    */
   private generateCursorSecret(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < 32; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
+    return randomBytes(32).toString('hex');
   }
 
   /**
@@ -1144,18 +1140,10 @@ export class MCPServer {
   }
 
   /**
-   * Create HMAC signature for cursor validation
+   * Create HMAC-SHA256 signature for cursor validation
    */
   private createHMAC(data: string): string {
-    // Simple hash for demonstration - in production use proper HMAC
-    let hash = 0;
-    const combined = data + this.cursorSecret;
-    for (let i = 0; i < combined.length; i++) {
-      const char = combined.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(36);
+    return createHmac('sha256', this.cursorSecret).update(data).digest('hex');
   }
 
   /**

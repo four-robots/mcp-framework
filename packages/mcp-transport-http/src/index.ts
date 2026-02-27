@@ -60,7 +60,7 @@ export class HttpTransport implements Transport {
     this.config = {
       host: config.host || '0.0.0.0',
       basePath: config.basePath || '/mcp',
-      enableDnsRebindingProtection: config.enableDnsRebindingProtection ?? false,
+      enableDnsRebindingProtection: config.enableDnsRebindingProtection ?? true,
       allowedHosts: config.allowedHosts || ['127.0.0.1', 'localhost'],
       ...config
     };
