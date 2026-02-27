@@ -1,8 +1,11 @@
 import { Request, Router } from 'express';
-import { 
-  OAuthProvider, 
-  User, 
-  TokenResult, 
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as OpenIDConnectStrategy } from 'passport-openidconnect';
+import {
+  OAuthProvider,
+  User,
+  TokenResult,
   OAuthDiscovery,
   ProtectedResourceMetadata,
   ClientRegistrationRequest,
@@ -23,6 +26,31 @@ export interface OIDCTokenResult extends TokenResult {
 }
 
 /**
+ * Session configuration for Passport.js OIDC login flow
+ */
+export interface OIDCSessionConfig {
+  /** Secret for signing the session cookie (required) */
+  secret: string;
+  /** Full callback URL for the OIDC redirect (required) */
+  callbackUrl: string;
+  /** Session cookie options */
+  cookie?: {
+    /** Set secure cookie flag (default: true in production) */
+    secure?: boolean;
+    /** Cookie httpOnly flag (default: true) */
+    httpOnly?: boolean;
+    /** Cookie max age in milliseconds (default: 86400000 / 24 hours) */
+    maxAge?: number;
+  };
+  /** Route prefix for auth routes (default: '/auth') */
+  routePrefix?: string;
+  /** Redirect URL after successful login (default: '/') */
+  successRedirect?: string;
+  /** Redirect URL on auth failure (default: '{routePrefix}/error') */
+  failureRedirect?: string;
+}
+
+/**
  * Generic OIDC provider configuration
  */
 export interface OIDCConfig {
@@ -36,33 +64,36 @@ export interface OIDCConfig {
   revocationEndpoint?: string;
   introspectionEndpoint?: string;
   registrationEndpoint?: string;
-  
+
   // Client configuration
   clientId: string;
   clientSecret?: string;
   redirectUri?: string;
   scopes?: string[];
-  
+
   // Token validation
   validateAudience?: boolean;
   expectedAudience?: string | string[];
   validateIssuer?: boolean;
   clockTolerance?: number;
-  
+
   // Claims mapping
   idClaim?: string; // Default: 'sub'
   usernameClaim?: string; // Default: 'preferred_username' or 'email'
   emailClaim?: string; // Default: 'email'
   nameClaim?: string; // Default: 'name'
   groupsClaim?: string; // Default: 'groups' or 'roles'
-  
+
   // Access control
   allowedGroups?: string[];
-  
+
   // Advanced options
   tokenEndpointAuthMethod?: 'client_secret_basic' | 'client_secret_post' | 'none';
   useIdToken?: boolean; // Use ID token for user info instead of userinfo endpoint
   additionalAuthParams?: Record<string, string>;
+
+  // Session-based authentication (opt-in)
+  session?: OIDCSessionConfig;
 }
 
 /**
@@ -106,10 +137,19 @@ const TokenResponseSchema = z.object({
 export class OIDCProvider extends OAuthProvider {
   private config: Required<OIDCConfig>;
   private discoveryCache: OIDCDiscoveryType | null = null;
+  private passportInitialized = false;
+  private sessionEnabled: boolean;
 
   constructor(config: OIDCConfig) {
     super();
-    
+
+    this.sessionEnabled = !!config.session;
+
+    // Validate session config
+    if (config.session && !config.session.secret) {
+      throw new Error('Session secret is required when session support is enabled');
+    }
+
     // Apply defaults
     this.config = {
       scopes: ['openid', 'profile', 'email'],
@@ -127,7 +167,7 @@ export class OIDCProvider extends OAuthProvider {
       additionalAuthParams: {},
       ...config
     } as Required<OIDCConfig>;
-    
+
     // Validate configuration
     if (!config.discoveryUrl && (!config.issuer || !config.authorizationEndpoint || !config.tokenEndpoint)) {
       throw new Error('Either discoveryUrl or manual endpoint configuration (issuer, authorizationEndpoint, tokenEndpoint) must be provided');
@@ -141,6 +181,62 @@ export class OIDCProvider extends OAuthProvider {
     // Fetch discovery document if using discovery URL
     if (this.config.discoveryUrl) {
       await this.fetchDiscovery();
+    }
+
+    // Initialize Passport if session support is enabled
+    if (this.sessionEnabled && !this.passportInitialized) {
+      await this.initializePassport();
+    }
+  }
+
+  /**
+   * Initialize Passport.js with the OpenID Connect strategy
+   */
+  private async initializePassport(): Promise<void> {
+    const discovery = await this.getDiscovery();
+    const sessionConfig = this.config.session!;
+
+    passport.use('oidc', new OpenIDConnectStrategy({
+      issuer: discovery.issuer,
+      authorizationURL: discovery.authorization_endpoint,
+      tokenURL: discovery.token_endpoint,
+      userInfoURL: discovery.userinfo_endpoint || '',
+      clientID: this.config.clientId,
+      clientSecret: this.config.clientSecret || '',
+      callbackURL: sessionConfig.callbackUrl,
+      scope: this.config.scopes,
+      skipUserProfile: false,
+    }, this.passportVerifyCallback.bind(this)) as any);
+
+    passport.serializeUser((user: any, done) => {
+      done(null, user);
+    });
+
+    passport.deserializeUser((user: any, done) => {
+      done(null, user);
+    });
+
+    this.passportInitialized = true;
+  }
+
+  /**
+   * Passport verify callback — converts OIDC profile to User
+   */
+  private async passportVerifyCallback(
+    _issuer: string,
+    profile: any,
+    done: (error: any, user?: any) => void
+  ): Promise<void> {
+    try {
+      const claims = profile._json || profile;
+      const user = this.mapClaimsToUser(claims);
+      if (!user) {
+        done(new Error('User not authorized'));
+        return;
+      }
+      done(null, user);
+    } catch (error) {
+      done(error);
     }
   }
 
@@ -571,26 +667,32 @@ export class OIDCProvider extends OAuthProvider {
   }
 
   /**
-   * Authenticate a request
+   * Authenticate a request (bearer token or session)
    */
   async authenticate(req: Request): Promise<User | null> {
+    // Try bearer token first
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      const expectedAudience = this.config.expectedAudience || `${req.protocol}://${req.get('host')}`;
+      return this.verifyToken(token, Array.isArray(expectedAudience) ? expectedAudience[0] : expectedAudience);
     }
-    
-    const token = authHeader.substring(7);
-    const expectedAudience = this.config.expectedAudience || `${req.protocol}://${req.get('host')}`;
-    
-    return this.verifyToken(token, Array.isArray(expectedAudience) ? expectedAudience[0] : expectedAudience);
+
+    // Fall back to session if enabled
+    if (this.sessionEnabled && (req as any).user) {
+      return (req as any).user;
+    }
+
+    return null;
   }
 
   /**
-   * Get user from request (sync - not applicable for stateless OIDC)
+   * Get user from request (sync)
    */
   getUser(req: Request): User | null {
-    // OIDC is typically stateless, so this returns null
-    // Override this method if implementing session-based authentication
+    if (this.sessionEnabled) {
+      return (req as any).user || null;
+    }
     return null;
   }
 
@@ -701,12 +803,100 @@ export class OIDCProvider extends OAuthProvider {
   }
 
   /**
-   * Setup OAuth routes (optional - override for session-based auth)
+   * Setup OAuth routes with optional session-based authentication
    */
   setupRoutes(router: Router): void {
-    // By default, OIDC providers don't need routes as they're stateless
-    // Override this method to add session-based authentication routes
-    console.log('OIDC provider initialized (stateless mode)');
+    if (!this.sessionEnabled) {
+      return;
+    }
+
+    const sessionConfig = this.config.session!;
+    const prefix = sessionConfig.routePrefix || '/auth';
+    const failureRedirect = sessionConfig.failureRedirect || `${prefix}/error`;
+    const successRedirect = sessionConfig.successRedirect || '/';
+
+    // Initialize passport (non-blocking)
+    this.initialize().catch(err =>
+      console.error('Failed to initialize OIDC passport:', err)
+    );
+
+    // Session middleware
+    router.use(session({
+      secret: sessionConfig.secret,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        secure: sessionConfig.cookie?.secure ?? (process.env.NODE_ENV === 'production'),
+        httpOnly: sessionConfig.cookie?.httpOnly ?? true,
+        maxAge: sessionConfig.cookie?.maxAge ?? (24 * 60 * 60 * 1000),
+      },
+    }));
+
+    // Passport middleware
+    router.use(passport.initialize());
+    router.use(passport.session());
+
+    // Login route
+    router.get(`${prefix}/login`, (req, res, next) => {
+      if (!this.passportInitialized) {
+        res.status(503).json(createOAuthError(
+          'temporarily_unavailable',
+          'Authentication system initializing'
+        ));
+        return;
+      }
+      passport.authenticate('oidc')(req, res, next);
+    });
+
+    // Callback route
+    router.get(`${prefix}/callback`,
+      (req, res, next) => {
+        if (!this.passportInitialized) {
+          res.status(503).json(createOAuthError(
+            'temporarily_unavailable',
+            'Authentication system initializing'
+          ));
+          return;
+        }
+        next();
+      },
+      passport.authenticate('oidc', {
+        failureRedirect,
+      }),
+      (_req, res) => {
+        res.redirect(successRedirect);
+      }
+    );
+
+    // Logout route
+    router.post(`${prefix}/logout`, (req, res) => {
+      (req as any).logout((err: any) => {
+        if (err) {
+          res.status(500).json(createOAuthError('server_error', 'Logout failed'));
+          return;
+        }
+        res.json({ success: true });
+      });
+    });
+
+    // User info route
+    router.get(`${prefix}/user`, (req, res) => {
+      const user = this.getUser(req);
+      if (!user) {
+        res.set('WWW-Authenticate', 'Bearer');
+        res.status(401).json(createOAuthError('unauthorized', 'Authentication required'));
+        return;
+      }
+      res.json({ user });
+    });
+
+    // Error route
+    router.get(`${prefix}/error`, (_req, res) => {
+      res.status(401).json(createOAuthError(
+        'access_denied',
+        'Authentication failed. Please check your credentials and try again.'
+      ));
+    });
   }
 }
 
@@ -771,6 +961,17 @@ export const Providers = {
   Microsoft: (tenantId: string, clientId: string, clientSecret?: string, config?: Partial<OIDCConfig>) =>
     new OIDCProvider({
       discoveryUrl: `https://login.microsoftonline.com/${tenantId}/v2.0/.well-known/openid-configuration`,
+      clientId,
+      clientSecret,
+      ...config,
+    }),
+
+  /**
+   * Create Authentik provider
+   */
+  Authentik: (baseUrl: string, applicationSlug: string, clientId: string, clientSecret?: string, config?: Partial<OIDCConfig>) =>
+    new OIDCProvider({
+      discoveryUrl: `${baseUrl}/application/o/${applicationSlug}/.well-known/openid-configuration`,
       clientId,
       clientSecret,
       ...config,

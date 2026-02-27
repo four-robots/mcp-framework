@@ -40,19 +40,24 @@ This is a modular framework for building Model Context Protocol (MCP) servers us
 ### Core Package Structure
 ```
 packages/
-├── mcp-server/           # Core framework with plugin architecture
-├── mcp-auth/            # Authentication abstractions and base implementations
-├── mcp-transport-stdio/ # stdio transport for local/CLI usage
-├── mcp-transport-http/  # HTTP transport with session management
-├── mcp-transport-sse/   # SSE transport for backwards compatibility
-└── mcp-auth-authentik/  # Authentik OAuth provider implementation
+├── mcp-server/              # Core framework with plugin architecture
+├── mcp-auth/                # Authentication abstractions and base implementations
+├── mcp-auth-oidc/           # Generic OIDC provider with session support
+├── mcp-transport-stdio/     # stdio transport for local/CLI usage
+├── mcp-transport-http/      # HTTP transport with session management
+├── mcp-transport-sse/       # SSE transport for backwards compatibility
+├── mcp-transport-websocket/ # WebSocket transport for real-time communication
+├── mcp-client/              # Enhanced MCP client
+├── mcp-client-http/         # HTTP client implementation
+├── mcp-client-stdio/        # stdio client implementation
+└── mcp-rate-limit/          # Rate limiting middleware
 ```
 
 ### Key Architectural Concepts
 
 **Transport Independence**: Tools are registered once on the MCPServer and can run on multiple transports simultaneously. The server supports stdio (for local CLI usage) and HTTP (for production web usage) transports.
 
-**Plugin Architecture**: The MCPServer class (`packages/mcp-server/src/index.ts:127`) acts as the core framework that accepts:
+**Plugin Architecture**: The MCPServer class (`packages/mcp-server/src/index.ts`) acts as the core framework that accepts:
 - Transport plugins (implementing the Transport interface)
 - Authentication providers (for HTTP transport)
 - Tools, resources, and prompts registered via the server
@@ -86,7 +91,7 @@ packages/
 - Tests use Vitest with Node.js environment
 
 ### Authentication Integration
-HTTP transport integrates with OAuth providers through the `@tylercoles/mcp-auth` abstraction. Authentik provider is implemented in `@tylercoles/mcp-auth-authentik`.
+HTTP transport integrates with OAuth providers through the `@tylercoles/mcp-auth` abstraction. The generic OIDC provider in `@tylercoles/mcp-auth-oidc` supports both stateless bearer token auth and optional Passport.js session-based login flows. Pre-configured factories are available for Auth0, Okta, Keycloak, Google, Microsoft, and Authentik.
 
 ### Build System
 The project uses TypeScript project references for efficient builds. The root `tsconfig.json` defines project references to all packages, enabling proper dependency resolution during builds.

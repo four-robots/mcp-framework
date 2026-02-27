@@ -24,8 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `@tylercoles/mcp-transport-websocket` - WebSocket transport for real-time apps
 - `@tylercoles/mcp-transport-sse` - Server-sent events transport
 - `@tylercoles/mcp-auth` - Authentication abstractions
-- `@tylercoles/mcp-auth-oidc` - Generic OIDC authentication provider
-- `@tylercoles/mcp-auth-authentik` - Authentik OAuth provider
+- `@tylercoles/mcp-auth-oidc` - Generic OIDC authentication provider with session support
 - `@tylercoles/mcp-client` - Enhanced MCP client
 - `@tylercoles/mcp-client-http` - HTTP client implementation
 - `@tylercoles/mcp-client-stdio` - stdio client implementation

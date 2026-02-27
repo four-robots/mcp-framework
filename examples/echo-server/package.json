@@ -19,7 +19,7 @@
         "@tylercoles/mcp-transport-stdio": "0.2.1",
         "@tylercoles/mcp-transport-http": "0.2.1",
         "@tylercoles/mcp-auth": "0.2.1",
-        "@tylercoles/mcp-auth-authentik": "0.2.1"
+        "@tylercoles/mcp-auth-oidc": "0.2.2"
     },
     "devDependencies": {
         "@types/node": "^20.0.0",

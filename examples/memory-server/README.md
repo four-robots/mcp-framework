@@ -2,7 +2,7 @@
 
 ## Overview
 
-This example demonstrates a full-featured MCP server built using the `@tylercoles/mcp-framework`. It provides persistent memory storage with NATS JetStream as the backend and Authentik for OAuth authentication.
+This example demonstrates a full-featured MCP server built using the `@tylercoles/mcp-framework`. It provides persistent memory storage with NATS JetStream as the backend and OIDC for OAuth authentication.
 
 This server showcases:
 - Using the framework's HTTP transport with OAuth authentication
@@ -17,7 +17,7 @@ This server showcases:
 
 - Node.js 18+ installed
 - NATS server running with JetStream enabled
-- Authentik instance configured with OAuth application
+- OIDC instance configured with OAuth application
 
 ### 2. Installation
 
@@ -40,7 +40,7 @@ This server demonstrates how to use the `@tylercoles/mcp-framework`:
 // Core framework packages
 import { MCPServer } from '@tylercoles/mcp-server';
 import { HttpTransport } from '@tylercoles/mcp-transport-http';
-import { AuthentikAuth } from '@tylercoles/mcp-auth-authentik';
+import { Providers } from '@tylercoles/mcp-auth-oidc';
 
 // Create server
 const mcpServer = new MCPServer({
@@ -48,12 +48,14 @@ const mcpServer = new MCPServer({
   version: '1.0.0'
 });
 
-// Configure HTTP transport with Authentik auth
+// Configure HTTP transport with OIDC auth
 const transport = new HttpTransport({
   port: 3000,
-  auth: new AuthentikAuth({
-    url: 'https://auth.example.com',
-    clientId: 'claude-ai-mcp'
+  auth: Providers.Authentik('https://auth.example.com', 'claude-ai-mcp', 'claude-ai-mcp', undefined, {
+    session: {
+      secret: 'your-session-secret',
+      callbackUrl: 'http://localhost:3000/auth/callback',
+    },
   })
 });
 
@@ -85,11 +87,11 @@ NATS_SERVERS=nats://localhost:4222
 NATS_USER=your-nats-user
 NATS_PASS=your-nats-password
 
-# Authentik OAuth Configuration
-AUTHENTIK_URL=https://auth.example.com
-AUTHENTIK_CLIENT_ID=your-client-id
-AUTHENTIK_CLIENT_SECRET=your-client-secret
-AUTHENTIK_REDIRECT_URI=http://localhost:3000/auth/callback
+# OIDC OAuth Configuration
+OIDC_URL=https://auth.example.com
+OIDC_CLIENT_ID=your-client-id
+OIDC_CLIENT_SECRET=your-client-secret
+OIDC_REDIRECT_URI=http://localhost:3000/auth/callback
 
 # Enable REST API (optional)
 ENABLE_API=true
@@ -154,7 +156,7 @@ The server provides the following memory tools:
 
 **IMPORTANT: Authentication is required for all operations, including Claude.ai access.**
 
-The server uses OAuth authentication via Authentik:
+The server uses OAuth authentication via OIDC:
 
 1. **Web Users** - Standard OAuth flow
    - Visit `/auth/login` to authenticate
@@ -187,7 +189,7 @@ The server uses OAuth authentication via Authentik:
 
 ### Authentication issues
 
-1. Verify Authentik configuration
+1. Verify OIDC configuration
 2. Check redirect URI matches exactly
 3. Ensure session secret is set
 4. Check browser console for errors
@@ -246,7 +248,7 @@ The server exposes several REST API endpoints alongside the MCP protocol:
 ```
 Claude.ai <-> MCP Server <-> NATS JetStream
                   |
-                  +-> Authentik OAuth
+                  +-> OIDC OAuth
 ```
 
 The server uses the official `@modelcontextprotocol/sdk` for MCP compliance and provides both HTTP/JSON-RPC transport for Claude.ai integration and OAuth-protected endpoints for web users.

@@ -2,7 +2,7 @@
   "name": "@tylercoles/example-memory-server",
   "private": true,
   "version": "0.1.1",
-  "description": "MCP server example with NATS persistence and Authentik authentication",
+  "description": "MCP server example with NATS persistence and OIDC authentication",
   "license": "MIT",
   "author": "Tyler Coles",
   "type": "module",
@@ -16,7 +16,7 @@
     "debug": "tsx --inspect src/index.ts"
   },
   "dependencies": {
-    "@tylercoles/mcp-auth-authentik": "0.2.1",
+    "@tylercoles/mcp-auth-oidc": "0.2.2",
     "@tylercoles/mcp-server": "0.2.1",
     "@tylercoles/mcp-transport-http": "0.2.1",
     "nats": "^2.20.0",

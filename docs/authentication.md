@@ -35,31 +35,40 @@ const httpTransport = new HttpTransport({
 server.useTransport(httpTransport);
 ```
 
-### Authentik Provider
+### Pre-configured Providers
 
-The `@tylercoles/mcp-auth-authentik` package provides Authentik-specific OAuth integration:
-
-```bash
-npm install @tylercoles/mcp-auth-authentik
-```
+The OIDC package includes factory functions for popular providers:
 
 ```typescript
-import { AuthentikProvider } from '@tylercoles/mcp-auth-authentik';
-import { HttpTransport } from '@tylercoles/mcp-transport-http';
+import { Providers } from '@tylercoles/mcp-auth-oidc';
 
-const authentikProvider = new AuthentikProvider({
-  issuer: 'https://auth.example.com',
-  clientId: 'your-client-id',
-  clientSecret: 'your-client-secret',
-  redirectUri: 'https://your-app.com/auth/callback'
+// Authentik
+const auth = Providers.Authentik('https://auth.example.com', 'my-app', 'client-id', 'client-secret');
+
+// Auth0
+const auth = Providers.Auth0('my-tenant.auth0.com', 'client-id', 'client-secret');
+
+// Keycloak
+const auth = Providers.Keycloak('https://keycloak.example.com', 'my-realm', 'client-id', 'client-secret');
+
+// Google, Microsoft, Okta also available
+```
+
+### Session-Based Authentication
+
+Enable browser login flows by adding a `session` config:
+
+```typescript
+import { Providers } from '@tylercoles/mcp-auth-oidc';
+
+const auth = Providers.Authentik('https://auth.example.com', 'my-app', 'client-id', 'client-secret', {
+  session: {
+    secret: process.env.SESSION_SECRET!,
+    callbackUrl: 'https://your-app.com/auth/callback',
+  },
 });
 
-const httpTransport = new HttpTransport({
-  port: 3000,
-  auth: authentikProvider
-});
-
-server.useTransport(httpTransport);
+// This automatically creates /auth/login, /auth/callback, /auth/logout routes
 ```
 
 ## Configuration

@@ -1,6 +1,6 @@
 import { MCPServer, z } from '@tylercoles/mcp-server';
 import { HttpTransport } from '@tylercoles/mcp-transport-http';
-import { AuthentikAuth } from '@tylercoles/mcp-auth-authentik';
+import { Providers } from '@tylercoles/mcp-auth-oidc';
 
 /**
  * Echo server example with OAuth authentication
@@ -8,8 +8,10 @@ import { AuthentikAuth } from '@tylercoles/mcp-auth-authentik';
  */
 async function main() {
   const PORT = parseInt(process.env.PORT || '3000', 10);
-  const AUTHENTIK_URL = process.env.AUTHENTIK_URL || 'https://auth.example.com';
+  const OIDC_URL = process.env.OIDC_URL || 'https://auth.example.com';
   const CLIENT_ID = process.env.CLIENT_ID || 'echo-server';
+  const CLIENT_SECRET = process.env.CLIENT_SECRET;
+  const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-production';
 
   // Create the server
   const server = new MCPServer({
@@ -29,7 +31,7 @@ async function main() {
     },
     async ({ message }, context) => {
       const user = context.user;
-      
+
       if (!user) {
         return {
           content: [{
@@ -39,7 +41,7 @@ async function main() {
           isError: true
         };
       }
-      
+
       return {
         content: [{
           type: 'text',
@@ -59,7 +61,7 @@ async function main() {
     },
     async (_args, context) => {
       const user = context.user;
-      
+
       if (!user) {
         return {
           content: [{
@@ -69,7 +71,7 @@ async function main() {
           isError: true
         };
       }
-      
+
       return {
         content: [{
           type: 'text',
@@ -79,18 +81,16 @@ async function main() {
     }
   );
 
-  // Create HTTP transport with Authentik OAuth
+  // Create HTTP transport with OIDC authentication (Authentik provider)
   // ALL OAuth discovery endpoints are automatically created!
   const transport = new HttpTransport({
     port: PORT,
     host: '127.0.0.1',
-    auth: new AuthentikAuth({
-      url: AUTHENTIK_URL,
-      clientId: CLIENT_ID,
-      applicationSlug: CLIENT_ID,
-      redirectUri: `http://localhost:${PORT}/auth/callback`,
-      authorizationFlowId: 'default-authorization-flow',
-      invalidationFlowId: 'default-invalidation-flow'
+    auth: Providers.Authentik(OIDC_URL, CLIENT_ID, CLIENT_ID, CLIENT_SECRET, {
+      session: {
+        secret: SESSION_SECRET,
+        callbackUrl: `http://localhost:${PORT}/auth/callback`,
+      },
     }),
     cors: {
       origin: true // Allow all origins in development
