@@ -2008,8 +2008,13 @@ export class MCPServer {
       return;
     }
 
-    // Stop all transports
-    await Promise.all(this.transports.map(t => t.stop()));
+    // Stop all transports - use allSettled so one failure doesn't prevent others from cleaning up
+    const results = await Promise.allSettled(this.transports.map(t => t.stop()));
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error('Transport failed to stop:', result.reason);
+      }
+    }
 
     // Stop session manager if enabled
     if (this.sessionManager) {
