@@ -4,6 +4,12 @@
     "description": "MCP client for stdio transport - wraps stdio MCP servers with clean TypeScript interfaces",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/index.js",
+            "types": "./dist/index.d.ts"
+        }
+    },
     "files": [
         "dist"
     ],

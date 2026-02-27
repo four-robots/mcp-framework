@@ -4,6 +4,12 @@
   "description": "Core framework for building Model Context Protocol (MCP) servers with plugin architecture",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "files": [
     "dist"
   ],
