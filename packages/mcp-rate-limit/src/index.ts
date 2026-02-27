@@ -56,6 +56,8 @@ export class MemoryRateLimiter implements RateLimiter {
     this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredWindows();
     }, cleanupIntervalMs);
+    // Allow Node.js to exit even if cleanup interval is still active
+    this.cleanupInterval.unref();
   }
 
   async check(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {

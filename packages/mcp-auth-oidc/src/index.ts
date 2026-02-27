@@ -141,6 +141,7 @@ export class OIDCProvider extends OAuthProvider {
   private config: Required<OIDCConfig>;
   private discoveryCache: OIDCDiscoveryType | null = null;
   private jwksCache: { keys: any[]; fetchedAt: number } | null = null;
+  private jwksFetchPromise: Promise<any[]> | null = null;
   private passportInitialized = false;
   private initializationError: Error | null = null;
   private sessionEnabled: boolean;
@@ -198,6 +199,10 @@ export class OIDCProvider extends OAuthProvider {
    * Initialize Passport.js with the OpenID Connect strategy
    */
   private async initializePassport(): Promise<void> {
+    if (this.passportInitialized) {
+      return;
+    }
+
     const discovery = await this.getDiscovery();
     const sessionConfig = this.config.session!;
 
@@ -213,15 +218,13 @@ export class OIDCProvider extends OAuthProvider {
       skipUserProfile: false,
     }, this.passportVerifyCallback.bind(this)) as any);
 
-    if (!this.passportInitialized) {
-      passport.serializeUser((user: any, done) => {
-        done(null, user);
-      });
+    passport.serializeUser((user: any, done) => {
+      done(null, user);
+    });
 
-      passport.deserializeUser((user: any, done) => {
-        done(null, user);
-      });
-    }
+    passport.deserializeUser((user: any, done) => {
+      done(null, user);
+    });
 
     this.passportInitialized = true;
   }
@@ -494,6 +497,20 @@ export class OIDCProvider extends OAuthProvider {
       return this.jwksCache.keys;
     }
 
+    // Coalesce concurrent fetches into a single request
+    if (this.jwksFetchPromise) {
+      return this.jwksFetchPromise;
+    }
+
+    this.jwksFetchPromise = this.doFetchJwks();
+    try {
+      return await this.jwksFetchPromise;
+    } finally {
+      this.jwksFetchPromise = null;
+    }
+  }
+
+  private async doFetchJwks(): Promise<any[]> {
     const discovery = await this.getDiscovery();
     if (!discovery.jwks_uri) {
       throw new Error('JWKS URI not available in discovery configuration');
@@ -554,8 +571,15 @@ export class OIDCProvider extends OAuthProvider {
 
       // Get the signing key and verify
       const signingKey = await this.getSigningKey(kid);
+      // Whitelist allowed signing algorithms to prevent algorithm confusion attacks
+      const allowedAlgorithms: jwt.Algorithm[] = ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512', 'PS256', 'PS384', 'PS512'];
+      const tokenAlg = header.header.alg;
+      const algorithms: jwt.Algorithm[] = (tokenAlg && allowedAlgorithms.includes(tokenAlg as jwt.Algorithm))
+        ? [tokenAlg as jwt.Algorithm]
+        : ['RS256'];
+
       const verifyOptions: jwt.VerifyOptions = {
-        algorithms: (header.header.alg ? [header.header.alg as jwt.Algorithm] : ['RS256']),
+        algorithms,
         clockTolerance: this.config.clockTolerance,
       };
 
@@ -757,7 +781,10 @@ export class OIDCProvider extends OAuthProvider {
     // Try bearer token first
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
+      const token = authHeader.substring(7).trim();
+      if (!token) {
+        return null;
+      }
       const expectedAudience = this.config.expectedAudience || `${req.protocol}://${req.get('host')}`;
       return this.verifyToken(token, Array.isArray(expectedAudience) ? expectedAudience[0] : expectedAudience);
     }

@@ -532,6 +532,7 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
     );
 
     this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = undefined;
       try {
         this.stats.reconnectCount++;
         await this.connect();

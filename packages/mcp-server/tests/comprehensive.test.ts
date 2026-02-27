@@ -426,9 +426,10 @@ describe('MCPServer - Comprehensive Tests', () => {
 
       server.useTransport(transport);
       await server.start();
-      
-      // Should not throw, but should log error
-      await expect(server.stop()).rejects.toThrow('Stop failed');
+
+      // Should not throw - stop uses allSettled for graceful error handling
+      await expect(server.stop()).resolves.toBeUndefined();
+      expect(server.isStarted()).toBe(false);
     });
   });
 });
