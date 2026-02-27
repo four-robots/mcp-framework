@@ -1638,14 +1638,18 @@ export class MCPServer {
   ): Promise<void> {
     // Send log notification via SDK server
     if (this.sdkServer.server && this.sdkServer.server.notification) {
-      await this.sdkServer.server.notification({
-        method: 'notifications/message',
-        params: {
-          level,
-          logger,
-          data
-        }
-      });
+      try {
+        await this.sdkServer.server.notification({
+          method: 'notifications/message',
+          params: {
+            level,
+            logger,
+            data
+          }
+        });
+      } catch (error) {
+        console.error('Failed to send log notification:', error);
+      }
     }
   }
 

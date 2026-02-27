@@ -124,7 +124,11 @@ export class HttpTransport implements Transport {
 
     // Cleanup rate limiting resources
     if (this.rateLimitMiddleware) {
-      await this.rateLimitMiddleware.cleanup();
+      try {
+        await this.rateLimitMiddleware.cleanup();
+      } catch (error) {
+        console.error('Failed to cleanup rate limiting:', error);
+      }
       this.rateLimitMiddleware = null;
     }
 
