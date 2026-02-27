@@ -236,6 +236,7 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
   };
   protected heartbeatTimer?: NodeJS.Timeout;
   protected reconnectTimer?: NodeJS.Timeout;
+  protected intentionalDisconnect = false;
 
   constructor(config: ClientConfig = {}) {
     this.config = {
@@ -413,8 +414,8 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
         }
       }
       
-      // Handle auto-reconnection
-      if (state === ConnectionState.Error || state === ConnectionState.Disconnected) {
+      // Handle auto-reconnection (skip if disconnect was intentional)
+      if (!this.intentionalDisconnect && (state === ConnectionState.Error || state === ConnectionState.Disconnected)) {
         if (this.config.autoReconnect && this.stats.reconnectCount < this.config.maxRetries) {
           this.scheduleReconnect();
         }

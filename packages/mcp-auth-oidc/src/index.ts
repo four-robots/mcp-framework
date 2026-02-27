@@ -633,13 +633,14 @@ export class OIDCProvider extends OAuthProvider {
     }
     
     return {
+      // Include all other claims as extra metadata
+      ...claims,
+      // Explicit sanitized fields override raw claims
       id: String(id),
       username: String(username),
       email: String(email),
       name: String(name),
       groups: Array.isArray(groups) ? groups.map(g => String(g)) : [],
-      // Include all other claims
-      ...claims,
     };
   }
 

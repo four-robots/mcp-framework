@@ -385,13 +385,19 @@ export class HttpTransport implements Transport {
           this.config.port,
           this.config.host!,
           () => {
+            // Replace startup error handler with logging-only handler
+            this.server.removeAllListeners('error');
+            this.server.on('error', (error: Error) => {
+              console.error('HTTP server error:', error);
+            });
             console.log(`MCP HTTP transport listening on ${this.config.host}:${this.config.port}`);
             resolve();
           }
         );
 
+        // Reject on startup errors (e.g. EADDRINUSE)
         this.server.on('error', (error: Error) => {
-          console.error('HTTP server error:', error);
+          reject(error);
         });
       } catch (error) {
         reject(error);

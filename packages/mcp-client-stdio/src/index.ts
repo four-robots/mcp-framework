@@ -61,6 +61,7 @@ export class StdioMCPClient extends BaseMCPClient {
       throw new Error("Client is already connected");
     }
 
+    this.intentionalDisconnect = false;
     await this.client.connect(this.transport);
     this.setConnectionState(ConnectionState.Connected);
   }
@@ -73,6 +74,7 @@ export class StdioMCPClient extends BaseMCPClient {
       return;
     }
 
+    this.intentionalDisconnect = true;
     try {
       await this.client.close();
     } finally {
