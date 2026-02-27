@@ -28,6 +28,7 @@ export interface RateLimitStats {
  */
 export interface RateLimiter {
   check(key: string, limit: number, windowMs: number): Promise<RateLimitResult>;
+  decrement(key: string): Promise<void>;
   reset(key: string): Promise<void>;
   getStats(key: string): Promise<RateLimitStats | null>;
   cleanup(): Promise<void>;
@@ -95,6 +96,13 @@ export class MemoryRateLimiter implements RateLimiter {
       totalRequests: window.requests,
       retryAfter
     };
+  }
+
+  async decrement(key: string): Promise<void> {
+    const window = this.windows.get(key);
+    if (window && window.requests > 0) {
+      window.requests--;
+    }
   }
 
   async reset(key: string): Promise<void> {
@@ -351,17 +359,17 @@ export class HttpRateLimitMiddleware {
 
         // Track response status for skip logic
         if (skipSuccessfulRequests || skipFailedRequests) {
+          const store = this.store;
           const originalSend = res.send;
           res.send = function(data: any) {
             const statusCode = res.statusCode;
             const shouldSkip = (skipSuccessfulRequests && statusCode < 400) ||
                              (skipFailedRequests && statusCode >= 400);
-            
+
             if (shouldSkip) {
-              // Reverse the request count
-              // Note: This is a simplification - in production you'd want more sophisticated tracking
+              store.decrement(key).catch(() => {});
             }
-            
+
             return originalSend.call(this, data);
           };
         }

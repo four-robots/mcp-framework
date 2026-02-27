@@ -15,6 +15,7 @@ import {
   OAuthErrorResponse
 } from '@tylercoles/mcp-auth';
 import jwt from 'jsonwebtoken';
+import { createPublicKey } from 'crypto';
 import fetch from 'node-fetch';
 import { z } from 'zod';
 
@@ -137,7 +138,9 @@ const TokenResponseSchema = z.object({
 export class OIDCProvider extends OAuthProvider {
   private config: Required<OIDCConfig>;
   private discoveryCache: OIDCDiscoveryType | null = null;
+  private jwksCache: { keys: any[]; fetchedAt: number } | null = null;
   private passportInitialized = false;
+  private initializationError: Error | null = null;
   private sessionEnabled: boolean;
 
   constructor(config: OIDCConfig) {
@@ -479,17 +482,94 @@ export class OIDCProvider extends OAuthProvider {
   }
 
   /**
-   * Verify ID token (simplified - just decode without verification for now)
+   * Fetch JWKS from the provider's jwks_uri endpoint
+   */
+  private async fetchJwks(): Promise<any[]> {
+    const JWKS_CACHE_TTL = 3600000; // 1 hour
+    if (this.jwksCache && (Date.now() - this.jwksCache.fetchedAt) < JWKS_CACHE_TTL) {
+      return this.jwksCache.keys;
+    }
+
+    const discovery = await this.getDiscovery();
+    if (!discovery.jwks_uri) {
+      throw new Error('JWKS URI not available in discovery configuration');
+    }
+
+    const response = await fetch(discovery.jwks_uri);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch JWKS: ${response.statusText}`);
+    }
+
+    const data = await response.json() as { keys: any[] };
+    if (!data.keys || !Array.isArray(data.keys)) {
+      throw new Error('Invalid JWKS response: missing keys array');
+    }
+
+    this.jwksCache = { keys: data.keys, fetchedAt: Date.now() };
+    return data.keys;
+  }
+
+  /**
+   * Get the signing key for a given key ID from JWKS
+   */
+  private async getSigningKey(kid: string): Promise<string> {
+    let keys = await this.fetchJwks();
+    let key = keys.find(k => k.kid === kid && k.use !== 'enc');
+
+    // If key not found, refetch in case keys were rotated
+    if (!key) {
+      this.jwksCache = null;
+      keys = await this.fetchJwks();
+      key = keys.find(k => k.kid === kid && k.use !== 'enc');
+    }
+
+    if (!key) {
+      throw new Error(`Signing key not found for kid: ${kid}`);
+    }
+
+    // Convert JWK to PEM using Node.js crypto
+    const publicKey = createPublicKey({ key, format: 'jwk' });
+    return publicKey.export({ type: 'spki', format: 'pem' }) as string;
+  }
+
+  /**
+   * Verify ID token with signature verification and claim validation
    */
   private async verifyIdToken(idToken: string, expectedAudience?: string): Promise<User | null> {
     try {
-      // For now, just decode the token without verification
-      // In a production environment, you would want to fetch the JWKS and verify the signature
-      const decoded = jwt.decode(idToken) as jwt.JwtPayload;
-      if (!decoded) {
+      // Decode header to get kid
+      const header = jwt.decode(idToken, { complete: true });
+      if (!header || typeof header === 'string') {
         throw new Error('Invalid ID token format');
       }
-      
+
+      const kid = header.header.kid;
+      if (!kid) {
+        throw new Error('ID token missing kid in header');
+      }
+
+      // Get the signing key and verify
+      const signingKey = await this.getSigningKey(kid);
+      const verifyOptions: jwt.VerifyOptions = {
+        algorithms: (header.header.alg ? [header.header.alg as jwt.Algorithm] : ['RS256']),
+        clockTolerance: this.config.clockTolerance,
+      };
+
+      // Validate issuer
+      if (this.config.validateIssuer) {
+        const discovery = await this.getDiscovery();
+        verifyOptions.issuer = discovery.issuer;
+      }
+
+      // Validate audience
+      if (this.config.validateAudience) {
+        const audience = expectedAudience || this.config.expectedAudience || this.config.clientId;
+        if (audience) {
+          verifyOptions.audience = typeof audience === 'string' ? audience : (audience as [string, ...string[]]);
+        }
+      }
+
+      const decoded = jwt.verify(idToken, signingKey, verifyOptions) as jwt.JwtPayload;
       return this.mapClaimsToUser(decoded);
     } catch (error) {
       console.error('ID token verification failed:', error);
@@ -816,9 +896,10 @@ export class OIDCProvider extends OAuthProvider {
     const successRedirect = sessionConfig.successRedirect || '/';
 
     // Initialize passport (non-blocking)
-    this.initialize().catch(err =>
-      console.error('Failed to initialize OIDC passport:', err)
-    );
+    this.initialize().catch(err => {
+      this.initializationError = err instanceof Error ? err : new Error(String(err));
+      console.error('Failed to initialize OIDC passport:', err);
+    });
 
     // Session middleware
     router.use(session({
@@ -838,6 +919,13 @@ export class OIDCProvider extends OAuthProvider {
 
     // Login route
     router.get(`${prefix}/login`, (req, res, next) => {
+      if (this.initializationError) {
+        res.status(503).json(createOAuthError(
+          'temporarily_unavailable',
+          'Authentication system failed to initialize'
+        ));
+        return;
+      }
       if (!this.passportInitialized) {
         res.status(503).json(createOAuthError(
           'temporarily_unavailable',
@@ -851,6 +939,13 @@ export class OIDCProvider extends OAuthProvider {
     // Callback route
     router.get(`${prefix}/callback`,
       (req, res, next) => {
+        if (this.initializationError) {
+          res.status(503).json(createOAuthError(
+            'temporarily_unavailable',
+            'Authentication system failed to initialize'
+          ));
+          return;
+        }
         if (!this.passportInitialized) {
           res.status(503).json(createOAuthError(
             'temporarily_unavailable',
