@@ -262,6 +262,8 @@ export class HttpTransport implements Transport {
             },
             id: req.body?.id || null,
           });
+        } else {
+          console.warn('MCP request error after headers sent, client may receive incomplete response');
         }
       }
     });
@@ -355,7 +357,8 @@ export class HttpTransport implements Transport {
     if (this.config.externalDomain) {
       return `https://${this.config.externalDomain}`;
     }
-    return `${req.protocol}://${req.get('host')}`;
+    const host = req.get('host') || `${this.config.host}:${this.config.port}`;
+    return `${req.protocol}://${host}`;
   }
 
   /**
@@ -374,6 +377,10 @@ export class HttpTransport implements Transport {
             resolve();
           }
         );
+
+        this.server.on('error', (error: Error) => {
+          console.error('HTTP server error:', error);
+        });
       } catch (error) {
         reject(error);
       }

@@ -85,6 +85,7 @@ export class WebSocketConnection {
     this.ws.on('error', (error) => {
       console.error('WebSocket error:', error);
       this.setState(ConnectionState.Error);
+      this.cleanup();
     });
 
     this.ws.on('close', (code, reason) => {
