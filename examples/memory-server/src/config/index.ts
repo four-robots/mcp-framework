@@ -5,7 +5,7 @@ import type { ServerConfig } from '../types/index.js';
  * Configuration schema validation
  */
 const authConfigSchema = z.object({
-  authentikUrl: z.string().url(),
+  oidcUrl: z.string().url(),
   clientId: z.string().min(1),
   clientSecret: z.string(), // Allow empty for public clients
   redirectUri: z.string().url(),
@@ -51,12 +51,12 @@ export function loadConfig(): ServerConfig {
     externalDomain: process.env.APP_EXTERNAL_DOMAIN,
     enableApi: process.env.ENABLE_API,
     auth: {
-      authentikUrl: process.env.AUTHENTIK_URL || '',
-      clientId: process.env.AUTHENTIK_CLIENT_ID || '',
-      clientSecret: process.env.AUTHENTIK_CLIENT_SECRET || '',
-      redirectUri: process.env.AUTHENTIK_REDIRECT_URI || '',
-      scope: process.env.AUTHENTIK_SCOPE || 'openid profile email',
-      allowedGroups: process.env.AUTHENTIK_ALLOWED_GROUPS || [],
+      oidcUrl: process.env.OIDC_URL || '',
+      clientId: process.env.OIDC_CLIENT_ID || '',
+      clientSecret: process.env.OIDC_CLIENT_SECRET || '',
+      redirectUri: process.env.OIDC_REDIRECT_URI || '',
+      scope: process.env.OIDC_SCOPE || 'openid profile email',
+      allowedGroups: process.env.OIDC_ALLOWED_GROUPS || [],
     },
     nats: {
       servers: process.env.NATS_SERVERS?.split(',') || ['nats://localhost:4222'],
@@ -93,12 +93,12 @@ export const ENV_DOCS = {
   SESSION_SECRET: 'Secret for session encryption (required, min 32 chars)',
   CORS_ORIGINS: 'Comma-separated list of allowed CORS origins',
 
-  // Authentik OAuth
-  AUTHENTIK_URL: 'Authentik server URL (e.g., https://auth.tylercoles.dev)',
-  AUTHENTIK_CLIENT_ID: 'OAuth client ID from Authentik',
-  AUTHENTIK_CLIENT_SECRET: 'OAuth client secret from Authentik',
-  AUTHENTIK_REDIRECT_URI: 'OAuth redirect URI (e.g., http://localhost:3000/auth/callback)',
-  AUTHENTIK_SCOPE: 'OAuth scopes (default: openid profile email)',
+  // OIDC OAuth
+  OIDC_URL: 'OIDC provider URL (e.g., https://auth.example.com)',
+  OIDC_CLIENT_ID: 'OAuth client ID',
+  OIDC_CLIENT_SECRET: 'OAuth client secret',
+  OIDC_REDIRECT_URI: 'OAuth redirect URI (e.g., http://localhost:3000/auth/callback)',
+  OIDC_SCOPE: 'OAuth scopes (default: openid profile email)',
 
   // NATS
   NATS_SERVERS: 'Comma-separated NATS server URLs (default: nats://localhost:4222)',

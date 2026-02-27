@@ -39,7 +39,7 @@ export interface AuthUser {
 }
 
 export interface AuthConfig {
-  authentikUrl: string;
+  oidcUrl: string;
   clientId: string;
   clientSecret: string;
   redirectUri: string;

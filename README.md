@@ -57,20 +57,21 @@ await server.start();
 ```typescript
 import { MCPServer } from '@tylercoles/mcp-server';
 import { HttpTransport } from '@tylercoles/mcp-transport-http';
-import { AuthentikProvider } from '@tylercoles/mcp-auth-authentik';
+import { Providers } from '@tylercoles/mcp-auth-oidc';
 
 const server = new MCPServer({
   name: 'my-http-server',
   version: '1.0.0'
 });
 
-// Configure HTTP transport with OAuth
+// Configure HTTP transport with OIDC auth (Authentik example)
 const httpTransport = new HttpTransport({
   port: 3000,
-  auth: new AuthentikProvider({
-    issuer: 'https://auth.example.com',
-    clientId: 'your-client-id',
-    clientSecret: 'your-client-secret'
+  auth: Providers.Authentik('https://auth.example.com', 'my-app', 'your-client-id', 'your-client-secret', {
+    session: {
+      secret: 'your-session-secret',
+      callbackUrl: 'http://localhost:3000/auth/callback',
+    },
   })
 });
 
@@ -112,8 +113,7 @@ await server.start();
 - **`@tylercoles/mcp-transport-http`**: HTTP transport with session management
 - **`@tylercoles/mcp-transport-sse`**: SSE transport for backwards compatibility
 - **`@tylercoles/mcp-transport-websocket`**: WebSocket transport for real-time communication
-- **`@tylercoles/mcp-auth-authentik`**: Authentik OAuth provider implementation
-- **`@tylercoles/mcp-auth-oidc`**: Generic OIDC authentication provider
+- **`@tylercoles/mcp-auth-oidc`**: Generic OIDC authentication provider with session support
 - **`@tylercoles/mcp-client`**: Enhanced MCP client with advanced features
 - **`@tylercoles/mcp-rate-limit`**: Rate limiting middleware
 
@@ -123,8 +123,7 @@ await server.start();
 packages/
 ├── mcp-server/              # Core framework
 ├── mcp-auth/               # Authentication abstractions
-├── mcp-auth-authentik/     # Authentik OAuth provider
-├── mcp-auth-oidc/          # Generic OIDC provider
+├── mcp-auth-oidc/          # Generic OIDC provider with session support
 ├── mcp-transport-stdio/    # stdio transport
 ├── mcp-transport-http/     # HTTP transport
 ├── mcp-transport-sse/      # SSE transport
@@ -148,8 +147,7 @@ packages/
 
 | Provider | Description | Features |
 |----------|-------------|----------|
-| **Authentik** | Authentik OAuth integration | OAuth 2.1, PKCE, dynamic client registration |
-| **OIDC** | Generic OpenID Connect | Standards-compliant OIDC implementation |
+| **OIDC** | Generic OpenID Connect | Standards-compliant OIDC with optional session support, pre-configured factories for Auth0, Okta, Keycloak, Google, Microsoft, Authentik |
 
 ## Examples
 

@@ -1,6 +1,6 @@
 import { MCPServer } from '@tylercoles/mcp-server';
 import { HttpTransport } from '@tylercoles/mcp-transport-http';
-import { AuthentikAuth } from '@tylercoles/mcp-auth-authentik';
+import { Providers } from '@tylercoles/mcp-auth-oidc';
 import { loadConfig } from './config/index.js';
 import { createLogger } from './utils/logger.js';
 import { NATSService } from './services/nats-service.js';
@@ -28,22 +28,18 @@ class Application {
       version: '1.0.0'
     });
 
-    // Create HTTP transport with Authentik auth
+    // Create HTTP transport with OIDC auth
     this.transport = new HttpTransport({
       port: config.port,
       host: config.host,
       basePath: '/mcp',
       externalDomain: config.externalDomain,
-      auth: new AuthentikAuth({
-        url: config.auth.authentikUrl,
-        clientId: 'claude-ai-mcp',
-        clientSecret: config.auth.clientSecret,
-        applicationSlug: 'claude-ai-mcp',
+      auth: Providers.Authentik(config.auth.oidcUrl, 'claude-ai-mcp', 'claude-ai-mcp', config.auth.clientSecret, {
         allowedGroups: config.auth.allowedGroups,
-        redirectUri: config.auth.redirectUri,
-        sessionSecret: config.sessionSecret,
-        authorizationFlowId: 'default-authorization-flow',
-        invalidationFlowId: 'default-invalidation-flow'
+        session: {
+          secret: config.sessionSecret,
+          callbackUrl: config.auth.redirectUri,
+        },
       }),
       cors: {
         origin: (origin, callback) => {

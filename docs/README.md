@@ -59,7 +59,7 @@ await server.start();
 - **`@tylercoles/mcp-server`** - Core framework with plugin architecture
 - **`@tylercoles/mcp-auth`** - Authentication abstractions and base implementations
 - **Transport Packages** - Multiple transport implementations (stdio, HTTP, WebSocket, SSE)
-- **Authentication Providers** - OAuth 2.1 providers (Authentik, generic OIDC)
+- **Authentication Providers** - OAuth 2.1 providers (generic OIDC with pre-configured factories for Auth0, Okta, Keycloak, Google, Microsoft, Authentik)
 - **Client Libraries** - Enhanced MCP clients with advanced features
 
 ### Key Features
@@ -80,8 +80,7 @@ await server.start();
 | `@tylercoles/mcp-transport-http` | HTTP transport | Web apps, REST APIs |
 | `@tylercoles/mcp-transport-websocket` | WebSocket transport | Real-time applications |
 | `@tylercoles/mcp-transport-sse` | SSE transport | Server-sent events |
-| `@tylercoles/mcp-auth-oidc` | Generic OIDC auth | OAuth 2.1 authentication |
-| `@tylercoles/mcp-auth-authentik` | Authentik auth | Authentik-specific OAuth |
+| `@tylercoles/mcp-auth-oidc` | Generic OIDC auth | OAuth 2.1 authentication with optional session support |
 | `@tylercoles/mcp-client` | Enhanced client | Advanced MCP client features |
 | `@tylercoles/mcp-rate-limit` | Rate limiting | Request throttling |
 

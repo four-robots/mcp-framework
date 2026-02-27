@@ -29,10 +29,7 @@
     {
       "path": "./packages/mcp-transport-websocket"
     },
-    {
-      "path": "./packages/mcp-auth-authentik"
-    },
-    {
+{
       "path": "./packages/mcp-auth-oidc"
     },
     {

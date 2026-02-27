@@ -54,7 +54,7 @@ export class SSETransport implements Transport {
     }
 
     // Body parsing
-    this.app.use(express.json({ limit: "10mb" }));
+    this.app.use(express.json({ limit: "1mb" }));
 
     // DNS rebinding protection
     if (this.config.enableDnsRebindingProtection) {

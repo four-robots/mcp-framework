@@ -12,7 +12,7 @@ This is a well-engineered monorepo implementing a modular Model Context Protocol
 
 **Current health:**
 - **Build:** Passes cleanly across all packages
-- **Tests:** 656 passing, 24 failing (all in one package: `mcp-auth-authentik`)
+- **Tests:** 656 passing (mcp-auth-authentik removed — its 24 failing tests are gone)
 - **Lint:** Clean
 - **Typecheck:** 12 TS6305 warnings (stale build outputs, not real type errors)
 
@@ -28,8 +28,7 @@ The CLAUDE.md documents 6 packages but the repo actually contains **12**:
 |---------|---------|-----------|-------|--------|
 | **mcp-server** | Core framework, plugin architecture | ~2,900 | 274 pass (91% coverage) | Mature |
 | **mcp-auth** | Auth abstractions & base implementations | ~800 | 80+ pass | Mature |
-| **mcp-auth-authentik** | Authentik OAuth provider | ~700 | **24 failing** | Broken tests |
-| **mcp-auth-oidc** | Generic OIDC provider (Auth0, Okta, etc.) | ~777 | 100+ pass | Mature |
+| **mcp-auth-oidc** | Generic OIDC provider with session support (Auth0, Okta, Authentik, etc.) | ~900 | 100+ pass | Mature |
 | **mcp-transport-http** | HTTP transport w/ sessions, auth, rate limiting | ~480 | Pass | Mature |
 | **mcp-transport-stdio** | stdio for local/CLI | ~80 | Pass | Mature |
 | **mcp-transport-sse** | Legacy SSE transport | ~210 | Pass (limited) | Minimal tests |
@@ -125,27 +124,19 @@ The MCPServer class at `packages/mcp-server/src/index.ts:1008` is the heart of t
 
 ## Issues Found
 
-### Critical: 24 Failing Tests in mcp-auth-authentik
+### Resolved: mcp-auth-authentik Removed
 
-All failures are in `packages/mcp-auth-authentik/tests/oauth-compliance.test.ts`. The tests expect HTTPS endpoint validation errors but instead hit a discovery fetch failure first.
-
-**Root cause:** Tests construct an AuthentikAuth with `url: 'https://auth.example.com'` but have insufficient mocking for the OIDC discovery fetch. The `getDiscovery()` method tries to reach the network and fails, masking the intended validation errors.
-
-**Failing test categories:**
-- HTTPS enforcement for token/userinfo endpoints (expected validation error, got fetch error)
-- Malformed JWT handling (fetch fails before JWT processing)
-- Token exchange failure error codes (fetch fails before exchange)
-- Full OAuth flow integration test (fetch fails at auth URL generation)
+The `mcp-auth-authentik` package (with 24 failing tests) has been removed and replaced by the generic `mcp-auth-oidc` provider, which now includes optional Passport.js session support and a `Providers.Authentik()` factory.
 
 ### High Priority
 
 | # | Issue | Package | Details |
 |---|-------|---------|---------|
 | 1 | **Monolithic class** | mcp-server | `index.ts` is ~2,900 lines in a single class. Should decompose into ToolRegistry, ResourceRegistry, CompletionSystem, etc. |
-| 2 | **Default session secret** | mcp-auth-authentik | Hardcoded `'authentik-secret-change-me'` fallback used if not configured. Console warning exists but should fail-fast in production. |
+| 2 | ~~Default session secret~~ | ~~mcp-auth-authentik~~ | Resolved: Package removed. OIDC provider requires explicit `session.secret` config. |
 | 3 | **tools.ts untested** | mcp-server | 0% function coverage. Exports `createSuccessResult`, `createErrorResult`, `createSuccessObjectResult` — possibly dead code. |
 | 4 | **CLAUDE.md outdated** | root | Documents 6 packages, repo has 12. Missing client, rate-limit, websocket, OIDC packages. |
-| 5 | **JWT tokens not signature-verified** | mcp-auth-authentik, mcp-auth-oidc | Both decode JWTs without JWKS verification. Code acknowledges this with comments. |
+| 5 | **JWT tokens not signature-verified** | mcp-auth-oidc | Decodes JWTs without JWKS verification. Code acknowledges this with comments. |
 | 6 | **Pagination HMAC may not be cryptographic** | mcp-server | Previous analysis flagged `createHMAC()` as using a simple hash loop. Should use `crypto.createHmac()`. |
 
 ### Medium Priority
@@ -154,7 +145,7 @@ All failures are in `packages/mcp-auth-authentik/tests/oauth-compliance.test.ts`
 |---|-------|---------|---------|
 | 7 | SSE session ID in query string | mcp-transport-sse | Insecure — IDs should be in headers like HTTP transport |
 | 8 | SSE 10MB body limit | mcp-transport-sse | 10x larger than HTTP's 1MB. DoS vector. |
-| 9 | Dynamic registration always advertised | mcp-auth-authentik | `supportsDynamicRegistration()` returns true without API token; fails at runtime |
+| 9 | ~~Dynamic registration always advertised~~ | ~~mcp-auth-authentik~~ | Resolved: Package removed. |
 | 10 | Unused `propagateErrors` param | mcp-server | `handleCompletion()` accepts but never uses this parameter |
 | 11 | Fragile Zod detection | mcp-server | Checks `_def`/`shape` internal properties instead of Zod public API |
 | 12 | Notifications use `console.error` | mcp-server | Should use the structured logging system |
