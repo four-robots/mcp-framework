@@ -395,8 +395,12 @@ export abstract class BearerTokenAuth extends AuthProvider {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return null;
     }
-    
-    const token = authHeader.substring(7);
+
+    const token = authHeader.substring(7).trim();
+    if (!token) {
+      return null;
+    }
+
     // Extract expected audience from request (base URL)
     const expectedAudience = `${req.protocol}://${req.get('host')}`;
     return this.verifyToken(token, expectedAudience);
@@ -500,6 +504,15 @@ export function createOAuthDiscoveryRoutes(provider: OAuthProvider): Router {
           return;
         }
         
+        if (!req.body || typeof req.body !== 'object') {
+          const errorResponse = createOAuthError(
+            'invalid_client_metadata',
+            'Request body must be a JSON object'
+          );
+          res.status(400).json(errorResponse);
+          return;
+        }
+
         const response = await provider.registerClient(req.body);
         res.json(response);
       } catch (error) {

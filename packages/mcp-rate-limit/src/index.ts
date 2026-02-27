@@ -634,10 +634,17 @@ export class WebSocketRateLimitManager {
 
     // Setup cleanup on connection close
     const cleanup = () => this.untrackConnection(ip, connection);
-    
+
     if (typeof connection.on === 'function') {
       connection.on('close', cleanup);
       connection.on('error', cleanup);
+    } else {
+      // No event support - schedule periodic cleanup check
+      setTimeout(() => {
+        if (typeof connection.readyState !== 'undefined' && connection.readyState > 1) {
+          cleanup();
+        }
+      }, 30000);
     }
   }
 

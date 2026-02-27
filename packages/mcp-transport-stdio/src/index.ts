@@ -42,7 +42,14 @@ export class StdioTransport implements Transport {
 
     // Connect the server to the transport
     const sdkServer = server.getSDKServer();
-    await sdkServer.connect(this.transport);
+    try {
+      await sdkServer.connect(this.transport);
+    } catch (error) {
+      // Roll back state on connect failure
+      this.transport = null;
+      this.server = null;
+      throw error;
+    }
 
     if (this.config.logStderr) {
       console.error('[StdioTransport] Server connected successfully');

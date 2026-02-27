@@ -13,9 +13,9 @@
         "clean": "rimraf dist"
     },
     "dependencies": {
-        "@tylercoles/mcp-server": "^0.1.0",
-        "@tylercoles/mcp-transport-sse": "^0.1.0",
-        "@tylercoles/mcp-transport-stdio": "^0.1.0",
+        "@tylercoles/mcp-server": "0.2.2",
+        "@tylercoles/mcp-transport-sse": "0.2.2",
+        "@tylercoles/mcp-transport-stdio": "0.2.2",
         "zod": "^3.23.8"
     },
     "devDependencies": {

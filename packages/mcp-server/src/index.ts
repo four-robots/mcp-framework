@@ -286,7 +286,9 @@ export class SessionManager {
 
     // Check if we need to remove old sessions to make room for a new session
     if (!existing && this.sessions.size >= this.config.maxSessions) {
-      this.evictOldestSession();
+      if (!this.evictOldestSession()) {
+        return false; // Cannot make room, reject the new session
+      }
     }
 
     this.sessions.set(key, sessionData);
@@ -1829,7 +1831,7 @@ export class MCPServer {
 
     // Truncate message if too long
     let finalMessage = message;
-    if (this.loggingConfig.maxMessageLength != null && message.length > this.loggingConfig.maxMessageLength) {
+    if (this.loggingConfig.maxMessageLength != null && this.loggingConfig.maxMessageLength > 3 && message.length > this.loggingConfig.maxMessageLength) {
       finalMessage = message.substring(0, this.loggingConfig.maxMessageLength - 3) + '...';
     }
 

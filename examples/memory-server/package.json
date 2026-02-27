@@ -17,8 +17,8 @@
   },
   "dependencies": {
     "@tylercoles/mcp-auth-oidc": "0.2.2",
-    "@tylercoles/mcp-server": "0.2.1",
-    "@tylercoles/mcp-transport-http": "0.2.1",
+    "@tylercoles/mcp-server": "0.2.2",
+    "@tylercoles/mcp-transport-http": "0.2.2",
     "nats": "^2.20.0",
     "uuid": "^11.1.0",
     "winston": "^3.11.0",
