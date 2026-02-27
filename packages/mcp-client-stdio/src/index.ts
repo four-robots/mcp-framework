@@ -73,8 +73,15 @@ export class StdioMCPClient extends BaseMCPClient {
       return;
     }
 
-    await this.client.close();
-    this.setConnectionState(ConnectionState.Disconnected);
+    try {
+      await this.client.close();
+    } finally {
+      if (typeof this.transport.close === 'function') {
+        await this.transport.close();
+      }
+      this.cleanup();
+      this.setConnectionState(ConnectionState.Disconnected);
+    }
   }
 
   /**

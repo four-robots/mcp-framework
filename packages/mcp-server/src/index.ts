@@ -2261,7 +2261,14 @@ export class MCPServer {
    */
   private extractTemplateParams(uriTemplate: string, uri: string): Record<string, string> {
     // Convert URI template to regex pattern
-    const regexPattern = uriTemplate.replace(/\{([^}]+)\}/g, '([^/]+)');
+    // First escape regex metacharacters in static parts, then replace template vars
+    const regexPattern = uriTemplate
+      .replace(/([.+?^${}()|[\]\\])/g, (match, char) => {
+        // Don't escape braces that are part of template variables
+        if (char === '{' || char === '}') return char;
+        return '\\' + char;
+      })
+      .replace(/\{([^}]+)\}/g, '([^/]+)');
     const regex = new RegExp(`^${regexPattern}$`);
 
     const match = uri.match(regex);
