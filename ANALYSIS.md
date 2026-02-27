@@ -1,167 +1,231 @@
 # MCP Framework Analysis
 
-**Date**: 2026-02-26
-**Version**: 0.2.2
+**Date:** 2026-02-27
+**Version:** 0.2.2
+**Branch:** claude/analyze-framework-mTMvX
 
 ---
 
-## Project Overview
+## Executive Summary
 
-A modular framework for building Model Context Protocol (MCP) servers using npm workspaces. The framework provides a plugin architecture with pluggable transports and authentication providers.
+This is a well-engineered monorepo implementing a modular Model Context Protocol (MCP) framework. It contains **12 workspace packages**, **7 example servers**, and comprehensive tooling. The architecture is sound — transport-independent, plugin-based, with proper separation of concerns across authentication, transport, rate limiting, and client layers.
 
-**12 packages** across `packages/`, plus **7 example apps** in `examples/`. Total ~9,000 LOC in package source files.
+**Current health:**
+- **Build:** Passes cleanly across all packages
+- **Tests:** 656 passing, 24 failing (all in one package: `mcp-auth-authentik`)
+- **Lint:** Clean
+- **Typecheck:** 12 TS6305 warnings (stale build outputs, not real type errors)
 
-| Package | LOC | Role | Maturity |
-|---------|-----|------|----------|
-| `mcp-server` | 2,954 | Core framework — tool/resource/prompt registration, pagination, logging, sessions, tracing | High |
-| `mcp-client` | 1,190 | Base client abstraction with enhanced features (retry, caching, health) | Medium |
-| `mcp-auth` | 589 | Auth abstraction — OAuth 2.1, PKCE, bearer, session, discovery routes | High |
-| `mcp-auth-authentik` | 1,022 | Authentik OIDC provider with Passport.js, dynamic client registration | High |
-| `mcp-auth-oidc` | 777 | Generic OIDC provider with pre-built factories (Auth0, Okta, Google, etc.) | Medium |
-| `mcp-rate-limit` | 721 | Memory-based rate limiter with sliding windows and Express middleware | Medium |
-| `mcp-transport-http` | 483 | HTTP/StreamableHTTP transport with session management, Helmet, CORS | High |
-| `mcp-transport-websocket` | 491 | WebSocket transport with heartbeat and connection state machine | Low |
-| `mcp-transport-stdio` | 88 | stdio transport for CLI/local use | High |
-| `mcp-transport-sse` | 216 | Legacy SSE transport for backwards compat | Low |
-| `mcp-client-http` | 242 | HTTP client implementation | Medium |
-| `mcp-client-stdio` | 240 | stdio client implementation | Medium |
+**Overall quality: 8/10** — Production-quality architecture with some rough edges to address.
 
 ---
 
-## Strengths
+## Package Inventory
 
-### 1. Clean Architecture
+The CLAUDE.md documents 6 packages but the repo actually contains **12**:
 
-The **Transport interface** (`packages/mcp-server/src/index.ts:181-184`) is simple: just `start(server)` and `stop()`. This makes adding new transports trivial.
+| Package | Purpose | LOC (src) | Tests | Status |
+|---------|---------|-----------|-------|--------|
+| **mcp-server** | Core framework, plugin architecture | ~2,900 | 274 pass (91% coverage) | Mature |
+| **mcp-auth** | Auth abstractions & base implementations | ~800 | 80+ pass | Mature |
+| **mcp-auth-authentik** | Authentik OAuth provider | ~700 | **24 failing** | Broken tests |
+| **mcp-auth-oidc** | Generic OIDC provider (Auth0, Okta, etc.) | ~777 | 100+ pass | Mature |
+| **mcp-transport-http** | HTTP transport w/ sessions, auth, rate limiting | ~480 | Pass | Mature |
+| **mcp-transport-stdio** | stdio for local/CLI | ~80 | Pass | Mature |
+| **mcp-transport-sse** | Legacy SSE transport | ~210 | Pass (limited) | Minimal tests |
+| **mcp-transport-websocket** | WebSocket real-time transport | ~491 | Pass | Mature |
+| **mcp-rate-limit** | Rate limiting (HTTP + WebSocket) | ~721 | Pass | Mature |
+| **mcp-client** | Base client interfaces & abstractions | ~1,190 | Pass | Mature |
+| **mcp-client-http** | HTTP client implementation | ~242 | Pass | Mature |
+| **mcp-client-stdio** | stdio client implementation | ~240 | Pass | Mature |
 
-The **plugin model** works well — tools are registered once and served over any transport simultaneously. `MCPServer.useTransport()` / `useTransports()` is intuitive.
-
-### 2. Comprehensive MCP Protocol Coverage
-
-The core server supports the full MCP feature set:
-- **Tools** with Zod schema validation and context injection
-- **Resources** (static + templates with URI pattern matching)
-- **Prompts** with argument schemas
-- **Completions** for autocomplete
-- **Sampling** (createMessage) for LLM requests back to the client
-- **Notifications** (progress, logging, resource/tool/prompt list changes, cancellation)
-- **Pagination** with HMAC-signed cursors
-- **Structured logging** following RFC 5424 levels
-- **Request tracing** with correlation IDs, trace/span IDs, performance metrics
-- **Session management** with TTL, eviction, and cleanup
-
-### 3. Strong Auth Story
-
-- OAuth 2.1 with PKCE (RFC 7636) in the base auth package
-- Discovery routes (RFC 9728) for OAuth Authorization Server Metadata
-- Three concrete auth strategies: Authentik, generic OIDC, and dev/no-auth
-- OIDC package ships pre-configured factories for Auth0, Okta, Keycloak, Google, Microsoft
-- Dynamic client registration support via Authentik API
-
-### 4. Good Developer Experience
-
-- 7 example apps ranging from simple echo servers to a full kanban board with WebSocket UI
-- Both module-style (`registerTool(toolModule)`) and legacy (`registerTool(name, config, handler)`) APIs
-- Helper utilities: `createSuccessResult()`, `createErrorResult()`, `createSuccessObjectResult()`
-- `MCPErrorFactory` with typed error constructors for JSON-RPC errors
-
-### 5. Testing
-
-- **41 test files** across all packages
-- Tests cover core functionality, edge cases, error handling, OAuth compliance
-- Vitest configured with 80% coverage thresholds (branches, functions, lines, statements)
-- CI runs tests on Node 18, 20, and 22
-
-### 6. Examples
-
-- `echo-server` — shows stdio, HTTP, OAuth, multi-transport, and custom router patterns
-- `kanban-board` — full-stack app with React frontend, SQLite, WebSocket real-time sync
-- `memory-server` — persistent memory with NATS integration
-- `jira-server`, `ide-server` — real-world use cases
-
----
-
-## Issues & Concerns
-
-### Critical
-
-1. **JWT tokens are never signature-verified** — Both `mcp-auth-authentik` (line 524) and `mcp-auth-oidc` (line 392) decode JWTs without verifying signatures against JWKS. Comments in code acknowledge this. An attacker could forge any claims.
-
-2. **Hardcoded default session secret** — `mcp-auth-authentik` uses `"authentik-secret-change-me"` as default (line 232). No warning emitted if unchanged. This is a production security risk.
-
-3. **HMAC "implementation" in pagination is not cryptographic** — `MCPServer.createHMAC()` (line 1149) uses a simple character-code hash loop, not a real HMAC. The comment says "Simple hash for demonstration — in production use proper HMAC." Cursor tokens can be forged.
-
-### Significant
-
-4. **Root tsconfig.json is missing references** — `mcp-transport-sse`, `mcp-client`, `mcp-client-http`, and `mcp-client-stdio` are not listed in `tsconfig.json` references (only 8 of 12 packages referenced). This means `tsc --build` and type-checking from root will skip these packages.
-
-5. **WebSocket transport doesn't actually integrate with MCP** — The WebSocket transport (`mcp-transport-websocket/src/index.ts`) has connection management and heartbeat but the actual MCP message handling at line 407 is a "simplified approach" that just logs method names without executing anything. It can't route to registered tools.
-
-6. **SSE transport has no auth support** — Unlike HTTP transport, SSE transport has zero authentication integration. No auth provider pluggability, no context injection, no user info.
-
-7. **In-memory state everywhere** — PKCE state maps (`mcp-auth/src/index.ts:215`), session data, rate limit windows, pagination — all in-memory with no clustering/distributed story. Fine for single-server dev, problematic for production.
-
-8. **HTTP transport session cleanup gap** — The `transports` Map in HTTP transport (line 55) grows with each new session. There's an `onclose` handler but no timeout for sessions that never close. Long-running servers accumulate stale transport instances.
-
-9. **DNS rebinding protection disabled by default** in HTTP transport (`enableDnsRebindingProtection: false` at line 63). Should be true by default for production safety.
-
-### Minor
-
-10. **`mcp-server/src/index.ts` is 2,954 lines** — This single file contains interfaces, enums, 5 classes (SessionManager, CorrelationManager, PerformanceTracker, RequestTracer, MCPServer), and all registration/notification logic. Could benefit from splitting into separate files.
-
-11. **`generateCursorSecret()` uses `Math.random()`** (line 1092) instead of `crypto.randomBytes()`. Not cryptographically secure.
-
-12. **Discovery metadata caches never expire** in both Authentik (line 329) and OIDC (line 174) providers. Long-running servers could serve stale OIDC configuration.
-
-13. **CORS default is `origin: true`** in SSE transport (line 49) — allows any origin. HTTP transport is more careful but still enables credentials by default.
-
-14. **Race condition in HTTP transport session creation** — Line 215 does check-then-act on sessionId without atomicity. Concurrent requests could create duplicate transports for the same session.
+**Undocumented in CLAUDE.md:** mcp-auth-oidc, mcp-client, mcp-client-http, mcp-client-stdio, mcp-rate-limit, mcp-transport-websocket
 
 ---
 
 ## Architecture
 
-### Dependency Graph
-
 ```
-mcp-server (core, no framework deps)
-  +-- mcp-transport-stdio (depends on: mcp-server, @modelcontextprotocol/sdk)
-  +-- mcp-transport-http  (depends on: mcp-server, mcp-auth, express, helmet, cors)
-  +-- mcp-transport-sse   (depends on: mcp-server, express, cors)
-  +-- mcp-transport-websocket (depends on: mcp-server, ws)
-  +-- mcp-auth            (depends on: express, crypto)
-  |   +-- mcp-auth-authentik (depends on: mcp-auth, passport, express-session)
-  |   +-- mcp-auth-oidc     (depends on: mcp-auth, zod)
-  +-- mcp-rate-limit      (depends on: zod, express)
-  +-- mcp-client          (depends on: @modelcontextprotocol/sdk)
-  |   +-- mcp-client-http  (depends on: mcp-client)
-  |   +-- mcp-client-stdio (depends on: mcp-client)
-  +-- examples/* (consume framework packages)
+                    ┌─────────────────────────────────────┐
+                    │         MCPServer (Core)             │
+                    │  Tools · Resources · Prompts         │
+                    │  Completions · Sampling · Logging    │
+                    │  Sessions · Tracing · Pagination     │
+                    └──────────┬──────────────────────────┘
+                               │
+              ┌────────────────┼────────────────┬──────────────┐
+              │                │                │              │
+     ┌────────▼──────┐ ┌──────▼──────┐ ┌───────▼────┐ ┌──────▼──────┐
+     │ HTTP Transport│ │stdio Transp.│ │SSE Transp. │ │ WS Transport│
+     │ Express+Helmet│ │ SDK wrapper │ │  (legacy)  │ │  ws library │
+     │+Auth+RateLimit│ │             │ │            │ │             │
+     └───────────────┘ └─────────────┘ └────────────┘ └─────────────┘
+              │
+    ┌─────────┼──────────┐
+    │         │          │
+┌───▼───┐ ┌──▼────┐ ┌───▼────┐
+│mcp-auth│ │Rate   │ │OIDC    │
+│(base)  │ │Limit  │ │Provider│
+└───┬────┘ └───────┘ └────────┘
+    │
+┌───▼──────────┐
+│Authentik Auth │
+└──────────────┘
+
+CLIENT SIDE:
+┌──────────────────────┐
+│  mcp-client (base)   │
+│  IMCPClient interface │
+│  BaseMCPClient       │
+└──────┬───────────────┘
+       │
+  ┌────┴─────┐
+  │          │
+┌─▼──────┐ ┌▼────────┐
+│HTTP    │ │stdio    │
+│Client  │ │Client   │
+└────────┘ └─────────┘
 ```
 
-### What's Working Well
+### Key Architectural Strengths
 
-- The core server -> transport -> auth layering is clean
-- Tools/resources/prompts are spec-compliant
-- The SDK integration (`@modelcontextprotocol/sdk`) is done properly — framework wraps the SDK rather than reimplementing protocol details
-
-### What Needs Attention
-
-- Client packages seem newer and less battle-tested than server packages
-- WebSocket and SSE transports are clearly secondary to HTTP and stdio
-- No integration tests that verify end-to-end transport -> server -> tool flows
-- The auth packages are feature-rich but have the JWT verification gap
+1. **Transport independence** — Tools registered once, available on all transports simultaneously
+2. **Plugin pattern** — Minimal Transport interface (just `start`/`stop`), easy to implement
+3. **Context injection** — ToolContext flows through to handlers with user info, tracing, sessions
+4. **OAuth 2.1 compliance** — PKCE mandatory, HTTPS enforced, RFC 9728 discovery
+5. **Observability built-in** — Correlation IDs, request tracing, structured logging (RFC 5424)
+6. **Session management** — Configurable persistence, expiration, LRU eviction
+7. **Secure pagination** — HMAC-SHA256 signed cursors with TTL
 
 ---
 
-## Summary Assessment
+## Core Server Deep Dive (mcp-server)
 
-This is a **well-designed early-stage framework** with clean architecture and ambitious scope. The core server and HTTP transport are production-approaching, the auth story is comprehensive, and the examples demonstrate real capability.
+The MCPServer class at `packages/mcp-server/src/index.ts:1008` is the heart of the framework (~2,900 lines). Key APIs:
 
-The main gaps are:
-- Security hardening (JWT verification, real HMAC, secret management)
-- The WebSocket transport being incomplete
-- The monolithic core server file
-- Missing tsconfig references for 4 packages
+**Registration:** `registerTool()`, `registerResource()`, `registerResourceTemplate()`, `registerPrompt()`, `registerCompletion()`, `registerSampling()`
 
-For a v0.2.2 project, the foundation is solid. The plugin architecture and transport abstraction are the standout design wins.
+**Transport:** `useTransport()`, `useTransports()`, `start()`, `stop()`
+
+**Context:** `setContext()`, `getContext()`, `setSessionContext()`, `getSessionContext()`
+
+**Observability:** `log()` + 8 convenience levels, `startTrace()`, `endTrace()`, `getPerformanceTracker()`
+
+**Notifications:** Progress, logging, cancellation, resource/tool/prompt list changes
+
+**Pagination:** HMAC-signed cursors for tools, resources, prompts, templates
+
+### Test Coverage (mcp-server)
+- **91.22% statements** | 89.44% branches | 97.24% functions
+- 274 tests across 13 test suites
+- `errors.ts` and `types.ts` at 100%
+- `tools.ts` at **9.37%** (essentially untested — possible dead code)
+
+---
+
+## Issues Found
+
+### Critical: 24 Failing Tests in mcp-auth-authentik
+
+All failures are in `packages/mcp-auth-authentik/tests/oauth-compliance.test.ts`. The tests expect HTTPS endpoint validation errors but instead hit a discovery fetch failure first.
+
+**Root cause:** Tests construct an AuthentikAuth with `url: 'https://auth.example.com'` but have insufficient mocking for the OIDC discovery fetch. The `getDiscovery()` method tries to reach the network and fails, masking the intended validation errors.
+
+**Failing test categories:**
+- HTTPS enforcement for token/userinfo endpoints (expected validation error, got fetch error)
+- Malformed JWT handling (fetch fails before JWT processing)
+- Token exchange failure error codes (fetch fails before exchange)
+- Full OAuth flow integration test (fetch fails at auth URL generation)
+
+### High Priority
+
+| # | Issue | Package | Details |
+|---|-------|---------|---------|
+| 1 | **Monolithic class** | mcp-server | `index.ts` is ~2,900 lines in a single class. Should decompose into ToolRegistry, ResourceRegistry, CompletionSystem, etc. |
+| 2 | **Default session secret** | mcp-auth-authentik | Hardcoded `'authentik-secret-change-me'` fallback used if not configured. Console warning exists but should fail-fast in production. |
+| 3 | **tools.ts untested** | mcp-server | 0% function coverage. Exports `createSuccessResult`, `createErrorResult`, `createSuccessObjectResult` — possibly dead code. |
+| 4 | **CLAUDE.md outdated** | root | Documents 6 packages, repo has 12. Missing client, rate-limit, websocket, OIDC packages. |
+| 5 | **JWT tokens not signature-verified** | mcp-auth-authentik, mcp-auth-oidc | Both decode JWTs without JWKS verification. Code acknowledges this with comments. |
+| 6 | **Pagination HMAC may not be cryptographic** | mcp-server | Previous analysis flagged `createHMAC()` as using a simple hash loop. Should use `crypto.createHmac()`. |
+
+### Medium Priority
+
+| # | Issue | Package | Details |
+|---|-------|---------|---------|
+| 7 | SSE session ID in query string | mcp-transport-sse | Insecure — IDs should be in headers like HTTP transport |
+| 8 | SSE 10MB body limit | mcp-transport-sse | 10x larger than HTTP's 1MB. DoS vector. |
+| 9 | Dynamic registration always advertised | mcp-auth-authentik | `supportsDynamicRegistration()` returns true without API token; fails at runtime |
+| 10 | Unused `propagateErrors` param | mcp-server | `handleCompletion()` accepts but never uses this parameter |
+| 11 | Fragile Zod detection | mcp-server | Checks `_def`/`shape` internal properties instead of Zod public API |
+| 12 | Notifications use `console.error` | mcp-server | Should use the structured logging system |
+| 13 | SSE transport minimal tests | mcp-transport-sse | No SSE connection, message, session lifecycle, or cleanup tests |
+| 14 | Deprecated dependencies | root | ESLint 8.x (deprecated), supertest 6.x, rimraf 3.x, glob 7.x |
+| 15 | HTTP transport session cleanup gap | mcp-transport-http | No timeout for sessions that never close; stale transports accumulate |
+| 16 | In-memory state everywhere | multiple | PKCE maps, sessions, rate limits, pagination — no distributed/clustering story |
+
+### Low Priority
+
+| # | Issue | Package | Details |
+|---|-------|---------|---------|
+| 17 | No transport-level metrics | all transports | No connection counts, latency, error rates |
+| 18 | No config validation schemas | transports | Invalid ports/hosts not caught until listen time |
+| 19 | Pagination cursor TTL defaults to 1 hour | mcp-server | Undocumented; may be too long |
+| 20 | Legacy `jest.config.js` | mcp-transport-stdio | Left from Jest migration |
+| 21 | Discovery metadata never expires | auth packages | Long-running servers could serve stale OIDC config |
+| 22 | `generateCursorSecret()` uses `Math.random()` | mcp-server | Not cryptographically secure |
+
+---
+
+## Transport Comparison
+
+| Feature | stdio | HTTP | SSE | WebSocket |
+|---------|-------|------|-----|-----------|
+| **SDK Transport** | StdioServerTransport | StreamableHTTPServerTransport | SSEServerTransport (legacy) | Custom (ws) |
+| **Auth Support** | None | Full OAuth 2.1 + custom | None | None |
+| **Rate Limiting** | N/A | Yes (global + per-client) | No | Configurable |
+| **Security Headers** | N/A | Helmet.js | CORS only | N/A |
+| **Body Size Limit** | Unbounded | 1MB | 10MB | Configurable |
+| **DNS Rebinding** | N/A | Yes (default) | Yes (default) | N/A |
+| **Session Model** | None | Per-request sessions | Map-based | Per-connection |
+| **Complexity** | ~80 LOC | ~480 LOC | ~210 LOC | ~491 LOC |
+| **Use Case** | CLI/local | Production web | Legacy/streaming | Real-time |
+
+---
+
+## Dependency Health
+
+**Core runtime (solid):**
+- `@modelcontextprotocol/sdk` ^1.16.0 — actively maintained
+- `express` ^4.x — stable
+- `zod` ^3.x — solid validation
+- `ws` ^8.x — standard WebSocket
+
+**Needs upgrade:**
+- `eslint` ^8.57 — deprecated, upgrade to 9.x flat config
+- `supertest` ^6.x — deprecated, upgrade to 7.1.3+
+- `rimraf` 3.x transitively — deprecated
+- `glob` 7.x transitively — deprecated
+- `@humanwhocodes/config-array` — deprecated ESLint internal
+
+---
+
+## Recommendations (Priority Order)
+
+1. **Fix the 24 failing Authentik OAuth compliance tests** — Mock the discovery endpoint properly so HTTPS validation, error handling, and integration tests actually execute
+2. **Update CLAUDE.md** to document all 12 packages
+3. **Address the default session secret** — fail in production instead of using insecure fallback
+4. **Add JWKS-based JWT signature verification** to both auth-authentik and auth-oidc
+5. **Upgrade deprecated dependencies** (ESLint 9, supertest 7, rimraf 5+)
+6. **Add proper tests for SSE transport** — currently has minimal coverage
+7. **Break up the monolithic MCPServer class** — ~2,900 lines is too large for maintainability
+8. **Audit tools.ts** — either add tests and use it, or remove if dead code
+9. **Add session timeouts** to HTTP transport to prevent stale transport accumulation
+10. **Consider distributed state** story for sessions, rate limits, PKCE state for multi-server deployments
+
+---
+
+## Summary
+
+This is a **well-designed framework** with clean architecture and ambitious scope. The core server and HTTP transport are approaching production-readiness, the auth story is comprehensive with OAuth 2.1 compliance, and the examples demonstrate real capability.
+
+The main gaps are security hardening (JWT verification, cryptographic HMAC, secret management), the failing Authentik test suite, the monolithic core file, and outdated documentation. For a v0.2.2 project, the foundation is solid. The plugin architecture and transport abstraction are the standout design wins.
