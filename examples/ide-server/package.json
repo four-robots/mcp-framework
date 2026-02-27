@@ -30,12 +30,12 @@
     "author": "",
     "license": "MIT",
     "dependencies": {
-        "@tylercoles/mcp-server": "0.2.1",
-        "@tylercoles/mcp-client": "0.2.1",
-        "@tylercoles/mcp-client-stdio": "0.2.1",
-        "@tylercoles/mcp-client-http": "0.2.1",
-        "@tylercoles/mcp-transport-stdio": "0.2.1",
-        "@tylercoles/mcp-transport-http": "0.2.1"
+        "@tylercoles/mcp-server": "0.2.2",
+        "@tylercoles/mcp-client": "0.2.2",
+        "@tylercoles/mcp-client-stdio": "0.2.2",
+        "@tylercoles/mcp-client-http": "0.2.2",
+        "@tylercoles/mcp-transport-stdio": "0.2.2",
+        "@tylercoles/mcp-transport-http": "0.2.2"
     },
     "devDependencies": {
         "@types/node": "^20.0.0",

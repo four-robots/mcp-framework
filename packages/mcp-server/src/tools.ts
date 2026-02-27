@@ -1,7 +1,7 @@
 import { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types";
 import { ZodRawShape } from "zod";
 
-export type SdkToolConfig<InputArgs extends ZodRawShape> = {
+export type SdkToolConfig<InputArgs extends ZodRawShape = ZodRawShape> = {
     title?: string;
     description?: string;
     inputSchema?: InputArgs;
