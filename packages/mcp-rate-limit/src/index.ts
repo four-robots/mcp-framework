@@ -642,8 +642,14 @@ export class WebSocketRateLimitManager {
     const count = this.connectionCounts.get(ip) || 0;
     this.connectionCounts.set(ip, count + 1);
 
-    // Setup cleanup on connection close
-    const cleanup = () => this.untrackConnection(ip, connection);
+    // Setup cleanup on connection close (guard against double-cleanup)
+    let cleaned = false;
+    const cleanup = () => {
+      if (!cleaned) {
+        cleaned = true;
+        this.untrackConnection(ip, connection);
+      }
+    };
 
     if (typeof connection.on === 'function') {
       connection.on('close', cleanup);
@@ -683,12 +689,11 @@ export class WebSocketRateLimitManager {
    */
   private closeOldestConnection(): void {
     let oldestConnection: any = null;
-    let oldestTime = Date.now();
+    let oldestTime = Infinity;
 
     for (const connections of this.activeConnections.values()) {
       for (const connection of connections) {
-        // Assuming connections have a createdAt timestamp
-        const createdAt = connection.createdAt || 0;
+        const createdAt = connection.createdAt || Date.now();
         if (createdAt < oldestTime) {
           oldestTime = createdAt;
           oldestConnection = connection;
