@@ -2312,10 +2312,10 @@ export class MCPServer {
       varNames.push(varMatch[1]);
     }
 
-    // Map captured groups to variable names
+    // Map captured groups to variable names, URL-decoding to match populateUriTemplate's encoding
     const params: Record<string, string> = {};
     for (let i = 0; i < varNames.length; i++) {
-      params[varNames[i]] = match[i + 1];
+      params[varNames[i]] = decodeURIComponent(match[i + 1]);
     }
 
     return params;
@@ -2721,6 +2721,9 @@ export class MCPServer {
 
       return response;
     } catch (error) {
+      if (error instanceof MCPErrorClass) {
+        throw error; // Preserve already-formatted MCP errors
+      }
       if (error instanceof Error) {
         throw MCPErrorFactory.internalError(`Sampling failed: ${error.message}`);
       }

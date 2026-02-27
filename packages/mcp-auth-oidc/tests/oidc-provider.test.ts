@@ -247,7 +247,7 @@ describe('OIDCProvider', () => {
         expect.fail('Expected to throw an error');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toBe('invalid_grant');
+        expect(error.message).toBe('invalid_grant: Invalid authorization code');
       }
     });
 
@@ -487,7 +487,7 @@ describe('OIDCProvider', () => {
         expect.fail('Expected to throw an error');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toBe('invalid_client_metadata');
+        expect(error.message).toBe('invalid_client_metadata: Invalid redirect URI');
       }
     });
   });
