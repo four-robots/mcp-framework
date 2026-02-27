@@ -76,7 +76,6 @@ export class SSETransport implements Transport {
     // SSE endpoint for server-to-client messages
     this.app.get(basePath + "sse", async (req: Request, res: Response) => {
       const sessionId = randomUUID();
-      let connected = false;
 
       try {
         // Create SSE transport
@@ -85,18 +84,20 @@ export class SSETransport implements Transport {
         this.transports.set(sessionId, transport);
 
         // Send session ID as first event
-        res.write(`data: ${JSON.stringify({ sessionId })}\n\n`);
+        const writeOk = res.write(`data: ${JSON.stringify({ sessionId })}\n\n`);
+        if (!writeOk) {
+          this.transports.delete(sessionId);
+          return;
+        }
 
         // Clean up on disconnect
         res.on("close", () => {
-          connected = false;
           this.transports.delete(sessionId);
         });
 
         // Connect MCP server
         const sdkServer = this.mcpServer!.getSDKServer();
         await sdkServer.connect(transport);
-        connected = true;
 
       } catch (error) {
         // Clean up transport on connect failure

@@ -76,8 +76,12 @@ export class StdioMCPClient extends BaseMCPClient {
     try {
       await this.client.close();
     } finally {
-      if (typeof this.transport.close === 'function') {
-        await this.transport.close();
+      try {
+        if (typeof this.transport.close === 'function') {
+          await this.transport.close();
+        }
+      } catch (error) {
+        console.error('Error closing transport:', error);
       }
       this.cleanup();
       this.setConnectionState(ConnectionState.Disconnected);
