@@ -41,6 +41,8 @@ export interface OIDCSessionConfig {
     httpOnly?: boolean;
     /** Cookie max age in milliseconds (default: 86400000 / 24 hours) */
     maxAge?: number;
+    /** SameSite attribute for CSRF protection (default: 'lax') */
+    sameSite?: 'strict' | 'lax' | 'none';
   };
   /** Route prefix for auth routes (default: '/auth') */
   routePrefix?: string;
@@ -208,13 +210,15 @@ export class OIDCProvider extends OAuthProvider {
       skipUserProfile: false,
     }, this.passportVerifyCallback.bind(this)) as any);
 
-    passport.serializeUser((user: any, done) => {
-      done(null, user);
-    });
+    if (!this.passportInitialized) {
+      passport.serializeUser((user: any, done) => {
+        done(null, user);
+      });
 
-    passport.deserializeUser((user: any, done) => {
-      done(null, user);
-    });
+      passport.deserializeUser((user: any, done) => {
+        done(null, user);
+      });
+    }
 
     this.passportInitialized = true;
   }
@@ -829,6 +833,7 @@ export class OIDCProvider extends OAuthProvider {
         secure: sessionConfig.cookie?.secure ?? (process.env.NODE_ENV === 'production'),
         httpOnly: sessionConfig.cookie?.httpOnly ?? true,
         maxAge: sessionConfig.cookie?.maxAge ?? (24 * 60 * 60 * 1000),
+        sameSite: sessionConfig.cookie?.sameSite ?? 'lax',
       },
     }));
 
