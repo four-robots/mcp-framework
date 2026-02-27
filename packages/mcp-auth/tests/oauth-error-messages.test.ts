@@ -4,7 +4,12 @@ import { Request, Router } from 'express';
 
 // Create a test implementation of OAuthProvider
 class TestOAuthProvider extends OAuthProvider {
-  getAuthorizationUrl(state: string, codeVerifier: string, resource?: string): string {
+  async getAuthUrl(
+    _state?: string,
+    _redirectUri?: string,
+    _resource?: string,
+    _pkceParams?: any
+  ): Promise<string> {
     return 'https://auth.test.com/authorize';
   }
 
@@ -26,11 +31,11 @@ class TestOAuthProvider extends OAuthProvider {
     return { id: 'test-user' };
   }
 
-  getCurrentUser(req: Request): any {
+  getUser(_req: Request): any {
     return { id: 'test-user' };
   }
 
-  getDiscovery() {
+  getDiscoveryMetadata(_baseUrl: string) {
     return {
       authorization_endpoint: 'https://auth.test.com/authorize',
       token_endpoint: 'https://auth.test.com/token',
@@ -91,7 +96,12 @@ describe('OAuth Error Messages', () => {
       it('should include the actual class name in error messages', async () => {
         // Create a custom provider with different name
         class CustomAuthProvider extends OAuthProvider {
-          getAuthorizationUrl(state: string, codeVerifier: string, resource?: string): string {
+          async getAuthUrl(
+            _state?: string,
+            _redirectUri?: string,
+            _resource?: string,
+            _pkceParams?: any
+          ): Promise<string> {
             return 'https://custom.test.com/authorize';
           }
 
@@ -113,11 +123,11 @@ describe('OAuth Error Messages', () => {
             return { id: 'custom-user' };
           }
 
-          getCurrentUser(req: Request): any {
+          getUser(_req: Request): any {
             return { id: 'custom-user' };
           }
 
-          getDiscovery() {
+          getDiscoveryMetadata(_baseUrl: string) {
             return {
               authorization_endpoint: 'https://custom.test.com/authorize',
               token_endpoint: 'https://custom.test.com/token',
