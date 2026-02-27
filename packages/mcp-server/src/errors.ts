@@ -172,21 +172,25 @@ export class MCPErrorFactory {
     }
 
     if (error instanceof Error) {
+      const data: Record<string, unknown> = {
+        type: 'wrapped_error',
+        name: error.name,
+      };
+      // Only include stack traces in development to avoid information disclosure
+      if (process.env.NODE_ENV !== 'production') {
+        data.stack = error.stack;
+      }
       return new MCPErrorClass(
         MCPErrorCode.InternalError,
         error.message,
-        {
-          type: 'wrapped_error',
-          name: error.name,
-          stack: error.stack
-        }
+        data
       );
     }
 
     return new MCPErrorClass(
       MCPErrorCode.InternalError,
       String(error),
-      { type: 'unknown_error', value: error }
+      { type: 'unknown_error' }
     );
   }
 }

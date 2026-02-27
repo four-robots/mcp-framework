@@ -53,6 +53,7 @@ export class WebSocketConnection {
     this.connectionTimeout = setTimeout(() => {
       if (this.state === ConnectionState.Connecting) {
         this.setState(ConnectionState.Error);
+        this.cleanup();
         this.ws.terminate();
       }
     }, this.config.connectionTimeout);
