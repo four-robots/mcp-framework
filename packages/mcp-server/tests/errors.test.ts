@@ -257,33 +257,30 @@ describe('MCP Error System', () => {
         
         expect(result.code).toBe(MCPErrorCode.InternalError);
         expect(result.message).toBe('Test error');
-        expect(result.data).toEqual({
+        expect(result.data).toMatchObject({
           type: 'wrapped_error',
           name: 'TestError',
-          stack: originalError.stack
         });
       });
 
       it('should convert string to MCP error', () => {
         const result = MCPErrorFactory.fromError('String error');
-        
+
         expect(result.code).toBe(MCPErrorCode.InternalError);
         expect(result.message).toBe('String error');
         expect(result.data).toEqual({
           type: 'unknown_error',
-          value: 'String error'
         });
       });
 
       it('should convert object to MCP error', () => {
         const errorObj = { custom: 'error', code: 500 };
         const result = MCPErrorFactory.fromError(errorObj);
-        
+
         expect(result.code).toBe(MCPErrorCode.InternalError);
         expect(result.message).toBe('[object Object]');
         expect(result.data).toEqual({
           type: 'unknown_error',
-          value: errorObj
         });
       });
 

@@ -396,6 +396,10 @@ export class SessionManager {
     this.cleanupTimer = setInterval(() => {
       this.cleanupExpiredSessions();
     }, this.config.cleanupIntervalMs);
+    // Allow Node.js to exit even if cleanup interval is still active
+    if (this.cleanupTimer.unref) {
+      this.cleanupTimer.unref();
+    }
   }
 
   /**
@@ -633,7 +637,15 @@ export type PromptHandler<T = any> = (args: T) => {
       text: string;
     };
   }>;
-};
+} | Promise<{
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: {
+      type: 'text';
+      text: string;
+    };
+  }>;
+}>;
 
 /**
  * Correlation ID and performance tracking utilities
@@ -1505,7 +1517,7 @@ export class MCPServer {
       const tracedContext = this.requestTracer.startTrace(`prompt_get:${name}`, this.getContext());
 
       try {
-        const result = handler(args);
+        const result = await handler(args);
 
         // End tracing successfully
         this.requestTracer.endTrace(tracedContext, true, undefined, JSON.stringify(result).length);
@@ -1551,27 +1563,32 @@ export class MCPServer {
         const propSchema = prop as any;
         let zodType: any;
 
-        switch (propSchema.type) {
-          case 'string':
-            zodType = z.string();
-            break;
-          case 'number':
-            zodType = z.number();
-            break;
-          case 'integer':
-            zodType = z.number().int();
-            break;
-          case 'boolean':
-            zodType = z.boolean();
-            break;
-          case 'array':
-            zodType = z.array(z.any());
-            break;
-          case 'object':
-            zodType = z.object(this.jsonSchemaToZodShape(propSchema));
-            break;
-          default:
-            zodType = z.any();
+        // Handle enum values before type-based matching
+        if (propSchema.enum && Array.isArray(propSchema.enum) && propSchema.enum.length > 0) {
+          zodType = z.enum(propSchema.enum as [string, ...string[]]);
+        } else {
+          switch (propSchema.type) {
+            case 'string':
+              zodType = z.string();
+              break;
+            case 'number':
+              zodType = z.number();
+              break;
+            case 'integer':
+              zodType = z.number().int();
+              break;
+            case 'boolean':
+              zodType = z.boolean();
+              break;
+            case 'array':
+              zodType = z.array(z.any());
+              break;
+            case 'object':
+              zodType = z.object(this.jsonSchemaToZodShape(propSchema));
+              break;
+            default:
+              zodType = z.any();
+          }
         }
 
         // Add description if present
