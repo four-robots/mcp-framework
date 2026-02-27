@@ -45,11 +45,24 @@ class TestOAuthProvider extends OAuthProvider {
     };
   }
 
-  getAuthorizationUrl(state: string, codeVerifier: string, resource?: string): string {
-    return `https://auth.example.com/authorize?state=${state}&code_verifier=${codeVerifier}`;
+  async getAuthUrl(
+    state?: string,
+    redirectUri?: string,
+    resource?: string,
+    pkceParams?: PKCEParams
+  ): Promise<string> {
+    const parts: string[] = [];
+    if (state) parts.push(`state=${state}`);
+    if (redirectUri) parts.push(`redirect_uri=${redirectUri}`);
+    if (resource) parts.push(`resource=${resource}`);
+    if (pkceParams) {
+      parts.push(`code_challenge=${pkceParams.codeChallenge}`);
+      parts.push(`code_challenge_method=${pkceParams.codeChallengeMethod}`);
+    }
+    return `https://auth.example.com/authorize?${parts.join('&')}`;
   }
 
-  getDiscovery(): OAuthDiscovery {
+  getDiscoveryMetadata(_baseUrl: string): OAuthDiscovery {
     return {
       issuer: 'https://auth.example.com',
       authorization_endpoint: 'https://auth.example.com/authorize',
