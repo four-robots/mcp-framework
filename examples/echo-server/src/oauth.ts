@@ -10,8 +10,12 @@ async function main() {
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const OIDC_URL = process.env.OIDC_URL || 'https://auth.example.com';
   const CLIENT_ID = process.env.CLIENT_ID || 'echo-server';
-  const CLIENT_SECRET = process.env.CLIENT_SECRET;
+  const CLIENT_SECRET = process.env.CLIENT_SECRET; // Optional for public clients
   const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-production';
+
+  if (!process.env.OIDC_URL || !process.env.CLIENT_ID) {
+    console.warn('Warning: OIDC_URL and CLIENT_ID should be set via environment variables');
+  }
 
   // Create the server
   const server = new MCPServer({
