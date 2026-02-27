@@ -102,7 +102,7 @@ export class MemoryRateLimiter implements RateLimiter {
 
   async decrement(key: string): Promise<void> {
     const window = this.windows.get(key);
-    if (window && window.requests > 0) {
+    if (window && window.requests > 0 && Date.now() < window.resetTime) {
       window.requests--;
     }
   }
