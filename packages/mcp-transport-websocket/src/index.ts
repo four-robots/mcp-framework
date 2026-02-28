@@ -58,6 +58,7 @@ export class WebSocketConnection {
         this.ws.terminate();
       }
     }, this.config.connectionTimeout);
+    this.connectionTimeout.unref();
 
     this.ws.on('open', () => {
       if (this.connectionTimeout) {

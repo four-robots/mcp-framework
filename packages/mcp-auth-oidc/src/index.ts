@@ -329,11 +329,11 @@ export class OIDCProvider extends OAuthProvider {
     }
     
     const params = new URLSearchParams({
+      ...this.config.additionalAuthParams,
       client_id: this.config.clientId,
       response_type: 'code',
       scope: this.config.scopes.join(' '),
       redirect_uri: redirectUri || this.config.redirectUri || '',
-      ...this.config.additionalAuthParams,
     });
     
     if (state) {

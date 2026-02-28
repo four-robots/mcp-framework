@@ -79,7 +79,7 @@ export class SSETransport implements Transport {
 
       try {
         // Create SSE transport
-        const transport = new SSEServerTransport("/messages", res);
+        const transport = new SSEServerTransport(basePath + "messages", res);
 
         this.transports.set(sessionId, transport);
 
