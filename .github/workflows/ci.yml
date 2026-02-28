@@ -87,10 +87,10 @@ jobs:
         npm ci --legacy-peer-deps || npm install --legacy-peer-deps
     
     - name: Build packages
-      run: npm run build
-    
+      run: npm run build:order || npm run build
+
     - name: Run TypeScript type checking
-      run: npx tsc --noEmit --project tsconfig.json
+      run: npm run typecheck
 
   publish-check:
     runs-on: ubuntu-latest
