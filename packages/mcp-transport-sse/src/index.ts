@@ -29,10 +29,14 @@ export class SSETransport implements Transport {
   private mcpServer?: MCPServer;
 
   constructor(config: Partial<SSEConfig> = {}) {
+    let basePath = config.basePath ?? "/";
+    if (!basePath.endsWith('/')) {
+      basePath += '/';
+    }
     this.config = {
       port: config.port ?? 3000,
       host: config.host ?? "127.0.0.1",
-      basePath: config.basePath ?? "/",
+      basePath,
       enableDnsRebindingProtection: config.enableDnsRebindingProtection ?? true,
       allowedHosts: config.allowedHosts ?? ["127.0.0.1", "localhost"],
       cors: config.cors ?? {},

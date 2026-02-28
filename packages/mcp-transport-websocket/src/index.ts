@@ -76,7 +76,9 @@ export class WebSocketConnection {
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error);
         // Send parse error response if it was a request
-        this.sendError(-32700, 'Parse error', undefined);
+        this.sendError(-32700, 'Parse error', undefined).catch(err => {
+          console.error('Failed to send parse error response:', err);
+        });
       }
     });
 
@@ -88,7 +90,7 @@ export class WebSocketConnection {
     this.ws.on('error', (error) => {
       console.error('WebSocket error:', error);
       this.setState(ConnectionState.Error);
-      this.cleanup();
+      // Don't cleanup here -- close event always follows error and will handle cleanup
     });
 
     this.ws.on('close', (code, reason) => {
