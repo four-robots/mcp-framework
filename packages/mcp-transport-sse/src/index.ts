@@ -78,9 +78,12 @@ export class SSETransport implements Transport {
       const sessionId = randomUUID();
 
       try {
-        // Create SSE transport
+        // Create SSE transport and connect to SDK server before exposing to clients
         const transport = new SSEServerTransport(basePath + "messages", res);
+        const sdkServer = this.mcpServer!.getSDKServer();
+        await sdkServer.connect(transport);
 
+        // Now that the transport is connected, register it and notify the client
         this.transports.set(sessionId, transport);
 
         // Send session ID as first event
@@ -94,10 +97,6 @@ export class SSETransport implements Transport {
         res.on("close", () => {
           this.transports.delete(sessionId);
         });
-
-        // Connect MCP server
-        const sdkServer = this.mcpServer!.getSDKServer();
-        await sdkServer.connect(transport);
 
       } catch (error) {
         // Clean up transport on connect failure
