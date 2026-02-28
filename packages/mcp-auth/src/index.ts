@@ -419,7 +419,7 @@ export class DevAuth extends AuthProvider {
 export abstract class BearerTokenAuth extends AuthProvider {
   async authenticate(req: Request): Promise<User | null> {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
       return null;
     }
 
@@ -464,7 +464,7 @@ export abstract class SessionAuth extends AuthProvider {
  */
 export function extractBearerToken(req: Request): string | null {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
     return null;
   }
   return authHeader.substring(7).trim();
