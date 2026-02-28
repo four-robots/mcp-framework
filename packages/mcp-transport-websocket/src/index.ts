@@ -287,6 +287,7 @@ export class WebSocketConnection {
    */
   terminate(): void {
     this.setState(ConnectionState.Disconnected);
+    this.cleanup();
     this.ws.terminate();
   }
 }

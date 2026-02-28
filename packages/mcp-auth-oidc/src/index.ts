@@ -638,8 +638,10 @@ export class OIDCProvider extends OAuthProvider {
     const username = claims[this.config.usernameClaim] || claims[this.config.emailClaim] || id;
     const email = claims[this.config.emailClaim] || '';
     const name = claims[this.config.nameClaim] || '';
-    const groups = claims[this.config.groupsClaim] || [];
-    
+    const rawGroups = claims[this.config.groupsClaim] || [];
+    // Normalize to array to prevent String.prototype.includes substring matching
+    const groups: string[] = Array.isArray(rawGroups) ? rawGroups.map(g => String(g)) : [String(rawGroups)];
+
     // Check group restrictions
     if (this.config.allowedGroups && this.config.allowedGroups.length > 0) {
       const hasAllowedGroup = this.config.allowedGroups.some(
@@ -660,7 +662,7 @@ export class OIDCProvider extends OAuthProvider {
       username: String(username),
       email: String(email),
       name: String(name),
-      groups: Array.isArray(groups) ? groups.map(g => String(g)) : [],
+      groups,
     };
   }
 

@@ -2686,7 +2686,7 @@ export class MCPServer {
     resourceTemplates: ResourceTemplateInfo[];
     prompts: PromptInfo[];
     completions: CompletionConfig[];
-    sampling?: SamplingConfig;
+    sampling?: Omit<SamplingConfig, 'createMessage'>;
   } {
     return {
       tools: this.getTools(),
@@ -2694,7 +2694,7 @@ export class MCPServer {
       resourceTemplates: this.listResourceTemplates(),
       prompts: this.getPrompts(),
       completions: this.listCompletions(),
-      ...(this.samplingConfig && { sampling: this.samplingConfig })
+      ...(this.samplingConfig && { sampling: this.getSamplingInfo()! })
     };
   }
 
