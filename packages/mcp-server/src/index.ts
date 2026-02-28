@@ -1069,7 +1069,7 @@ export class MCPServer {
 
     // Initialize logging configuration
     this.loggingConfig = {
-      level: config.logging?.level || LogLevel.Info,
+      level: config.logging?.level ?? LogLevel.Info,
       structured: config.logging?.structured || false,
       includeTimestamp: config.logging?.includeTimestamp !== undefined ? config.logging.includeTimestamp : true,
       includeSource: config.logging?.includeSource || false,

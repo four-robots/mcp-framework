@@ -441,7 +441,7 @@ export class OIDCProvider extends OAuthProvider {
   /**
    * Verify an access token
    */
-  async verifyToken(token: string, expectedAudience?: string): Promise<User | null> {
+  async verifyToken(token: string, expectedAudience?: string | string[]): Promise<User | null> {
     try {
       // If using ID tokens, decode and verify the ID token
       if (this.config.useIdToken) {
@@ -556,7 +556,7 @@ export class OIDCProvider extends OAuthProvider {
   /**
    * Verify ID token with signature verification and claim validation
    */
-  private async verifyIdToken(idToken: string, expectedAudience?: string): Promise<User | null> {
+  private async verifyIdToken(idToken: string, expectedAudience?: string | string[]): Promise<User | null> {
     try {
       // Decode header to get kid
       const header = jwt.decode(idToken, { complete: true });
@@ -786,7 +786,7 @@ export class OIDCProvider extends OAuthProvider {
         return null;
       }
       const expectedAudience = this.config.expectedAudience || `${req.protocol}://${req.get('host')}`;
-      return this.verifyToken(token, Array.isArray(expectedAudience) ? expectedAudience[0] : expectedAudience);
+      return this.verifyToken(token, expectedAudience);
     }
 
     // Fall back to session if enabled
