@@ -705,10 +705,14 @@ export class WebSocketRateLimitManager {
    * Get unique connection identifier
    */
   private getConnectionId(connection: any): string {
-    return connection.id || 
-           connection._id || 
-           connection.remoteAddress || 
-           Math.random().toString(36);
+    if (connection.id) return connection.id;
+    if (connection._id) return connection._id;
+    if (connection.remoteAddress) return connection.remoteAddress;
+    // Assign a stable ID so the same connection always maps to the same rate limit bucket
+    if (!connection.__rateLimitId) {
+      connection.__rateLimitId = `anon_${Math.random().toString(36).substring(2, 11)}`;
+    }
+    return connection.__rateLimitId;
   }
 
   /**
