@@ -368,9 +368,21 @@ class IdeMCPServer {
     }
 
     // Implementation methods (simplified versions - the full implementations would be similar to the original)
+    /**
+     * Validate that a resolved path stays within the allowed base directory
+     */
+    private validatePath(basePath: string, targetPath: string): string {
+        const resolved = path.resolve(basePath, targetPath);
+        const resolvedBase = path.resolve(basePath);
+        if (!resolved.startsWith(resolvedBase + path.sep) && resolved !== resolvedBase) {
+            throw new Error(`Path traversal detected: target escapes base directory`);
+        }
+        return resolved;
+    }
+
     private async createProject(config: ProjectConfig) {
         try {
-            const projectPath = path.join(config.directory, config.name);
+            const projectPath = this.validatePath(config.directory, config.name);
             
             // Create project directory
             await fs.mkdir(projectPath, { recursive: true });
@@ -697,7 +709,7 @@ trim_trailing_whitespace = false
     private async gitClone(args: any) {
         try {
             const projectName = args.projectName || path.basename(args.url, '.git');
-            const projectPath = path.join(args.directory, projectName);
+            const projectPath = this.validatePath(args.directory, projectName);
 
             const gitArgs = ["clone"];
             if (args.branch) gitArgs.push("-b", args.branch);
@@ -729,6 +741,7 @@ trim_trailing_whitespace = false
     }
 
     private async execCommand(command: string, args: string[], options?: { cwd?: string }): Promise<{ stdout: string; stderr: string }> {
+        const MAX_OUTPUT = 10 * 1024 * 1024; // 10 MB limit
         return new Promise((resolve, reject) => {
             const child = spawn(command, args, {
                 cwd: options?.cwd,
@@ -737,13 +750,21 @@ trim_trailing_whitespace = false
 
             let stdout = '';
             let stderr = '';
+            let truncated = false;
 
             child.stdout?.on('data', (data) => {
-                stdout += data.toString();
+                if (stdout.length < MAX_OUTPUT) {
+                    stdout += data.toString();
+                } else if (!truncated) {
+                    truncated = true;
+                    stdout += '\n[output truncated]';
+                }
             });
 
             child.stderr?.on('data', (data) => {
-                stderr += data.toString();
+                if (stderr.length < MAX_OUTPUT) {
+                    stderr += data.toString();
+                }
             });
 
             child.on('close', (code) => {

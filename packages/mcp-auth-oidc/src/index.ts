@@ -16,7 +16,7 @@ import {
 } from '@tylercoles/mcp-auth';
 import jwt from 'jsonwebtoken';
 import { createPublicKey } from 'crypto';
-import fetch from 'node-fetch';
+import fetch, { type RequestInit as FetchRequestInit, type Response as FetchResponse } from 'node-fetch';
 import { z } from 'zod';
 
 /**
@@ -94,6 +94,9 @@ export interface OIDCConfig {
   tokenEndpointAuthMethod?: 'client_secret_basic' | 'client_secret_post' | 'none';
   useIdToken?: boolean; // Use ID token for user info instead of userinfo endpoint
   additionalAuthParams?: Record<string, string>;
+
+  // Network options
+  fetchTimeout?: number; // Timeout for OIDC network requests in ms (default: 10000)
 
   // Session-based authentication (opt-in)
   session?: OIDCSessionConfig;
@@ -174,6 +177,7 @@ export class OIDCProvider extends OAuthProvider {
       useIdToken: false,
       allowedGroups: [],
       additionalAuthParams: {},
+      fetchTimeout: 10000,
       ...config
     } as Required<OIDCConfig>;
 
@@ -186,6 +190,15 @@ export class OIDCProvider extends OAuthProvider {
     if (!config.discoveryUrl && config.useIdToken && !config.jwksUri) {
       throw new Error('jwksUri is required when useIdToken is true and discoveryUrl is not provided');
     }
+  }
+
+  /**
+   * Create a fetch request with timeout via AbortController
+   */
+  private fetchWithTimeout(url: string, options?: FetchRequestInit): Promise<FetchResponse> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.fetchTimeout);
+    return fetch(url, { ...options, signal: controller.signal as any }).finally(() => clearTimeout(timeout));
   }
 
   /**
@@ -285,7 +298,7 @@ export class OIDCProvider extends OAuthProvider {
     }
 
     try {
-      const response = await fetch(this.config.discoveryUrl!);
+      const response = await this.fetchWithTimeout(this.config.discoveryUrl!);
       if (!response.ok) {
         throw new Error(`Failed to fetch discovery document: ${response.statusText}`);
       }
@@ -423,12 +436,12 @@ export class OIDCProvider extends OAuthProvider {
         headers['Authorization'] = `Basic ${credentials}`;
       }
       
-      const response = await fetch(discovery.token_endpoint, {
+      const response = await this.fetchWithTimeout(discovery.token_endpoint, {
         method: 'POST',
         headers,
         body: params.toString(),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (errorData && typeof errorData === 'object' && 'error' in errorData) {
@@ -439,10 +452,10 @@ export class OIDCProvider extends OAuthProvider {
         }
         throw new Error(`Token exchange failed: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       const tokenResponse = TokenResponseSchema.parse(data);
-      
+
       return {
         accessToken: tokenResponse.access_token,
         refreshToken: tokenResponse.refresh_token,
@@ -471,20 +484,20 @@ export class OIDCProvider extends OAuthProvider {
       if (this.config.useIdToken) {
         return this.verifyIdToken(token, expectedAudience);
       }
-      
+
       // Otherwise, use the userinfo endpoint
       const discovery = await this.getDiscovery();
-      
+
       if (!discovery.userinfo_endpoint) {
         throw new Error('UserInfo endpoint not available');
       }
-      
+
       // Validate HTTPS endpoint
       if (!this.validateHttpsEndpoint(discovery.userinfo_endpoint)) {
         throw new Error('UserInfo endpoint must use HTTPS in production');
       }
-      
-      const response = await fetch(discovery.userinfo_endpoint, {
+
+      const response = await this.fetchWithTimeout(discovery.userinfo_endpoint, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -544,7 +557,7 @@ export class OIDCProvider extends OAuthProvider {
       throw new Error('JWKS URI must use HTTPS in production');
     }
 
-    const response = await fetch(discovery.jwks_uri);
+    const response = await this.fetchWithTimeout(discovery.jwks_uri);
     if (!response.ok) {
       throw new Error(`Failed to fetch JWKS: ${response.statusText}`);
     }
@@ -602,9 +615,10 @@ export class OIDCProvider extends OAuthProvider {
       // Whitelist allowed signing algorithms to prevent algorithm confusion attacks
       const allowedAlgorithms: jwt.Algorithm[] = ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512', 'PS256', 'PS384', 'PS512'];
       const tokenAlg = header.header.alg;
-      const algorithms: jwt.Algorithm[] = (tokenAlg && allowedAlgorithms.includes(tokenAlg as jwt.Algorithm))
-        ? [tokenAlg as jwt.Algorithm]
-        : ['RS256'];
+      if (!tokenAlg || !allowedAlgorithms.includes(tokenAlg as jwt.Algorithm)) {
+        throw new Error(`Unsupported or missing signing algorithm: ${tokenAlg || '(none)'}`);
+      }
+      const algorithms: jwt.Algorithm[] = [tokenAlg as jwt.Algorithm];
 
       const verifyOptions: jwt.VerifyOptions = {
         algorithms,
@@ -710,12 +724,12 @@ export class OIDCProvider extends OAuthProvider {
         headers['Authorization'] = `Basic ${credentials}`;
       }
       
-      const response = await fetch(discovery.token_endpoint, {
+      const response = await this.fetchWithTimeout(discovery.token_endpoint, {
         method: 'POST',
         headers,
         body: params.toString(),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (errorData && typeof errorData === 'object' && 'error' in errorData) {
@@ -786,12 +800,12 @@ export class OIDCProvider extends OAuthProvider {
         headers['Authorization'] = `Basic ${credentials}`;
       }
       
-      const response = await fetch(discovery.revocation_endpoint, {
+      const response = await this.fetchWithTimeout(discovery.revocation_endpoint, {
         method: 'POST',
         headers,
         body: params.toString(),
       });
-      
+
       if (!response.ok) {
         console.warn(`Token revocation failed: ${response.statusText}`);
       }
@@ -904,7 +918,7 @@ export class OIDCProvider extends OAuthProvider {
     }
     
     try {
-      const response = await fetch(discovery.registration_endpoint, {
+      const response = await this.fetchWithTimeout(discovery.registration_endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
