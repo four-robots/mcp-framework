@@ -144,6 +144,7 @@ export class OIDCProvider extends OAuthProvider {
   private static DISCOVERY_CACHE_TTL = 3600000; // 1 hour
   private jwksCache: { keys: any[]; fetchedAt: number } | null = null;
   private jwksFetchPromise: Promise<any[]> | null = null;
+  private discoveryFetchPromise: Promise<void> | null = null;
   private passportInitialized = false;
   private initializationError: Error | null = null;
   private sessionEnabled: boolean;
@@ -259,13 +260,27 @@ export class OIDCProvider extends OAuthProvider {
     if (!this.config.discoveryUrl) {
       throw new Error('Discovery URL not configured');
     }
-    
+
+    // Coalesce concurrent fetches into a single request
+    if (this.discoveryFetchPromise) {
+      return this.discoveryFetchPromise;
+    }
+
+    this.discoveryFetchPromise = this.doFetchDiscovery();
     try {
-      const response = await fetch(this.config.discoveryUrl);
+      await this.discoveryFetchPromise;
+    } finally {
+      this.discoveryFetchPromise = null;
+    }
+  }
+
+  private async doFetchDiscovery(): Promise<void> {
+    try {
+      const response = await fetch(this.config.discoveryUrl!);
       if (!response.ok) {
         throw new Error(`Failed to fetch discovery document: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       this.discoveryCache = OIDCDiscoverySchema.parse(data);
       this.discoveryCachedAt = Date.now();

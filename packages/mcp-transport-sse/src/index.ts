@@ -84,6 +84,12 @@ export class SSETransport implements Transport {
       try {
         // Create SSE transport and connect to SDK server before exposing to clients
         const transport = new SSEServerTransport(basePath + "messages", res);
+
+        // Register close handler BEFORE connect so early disconnects are caught
+        res.on("close", () => {
+          this.transports.delete(sessionId);
+        });
+
         const sdkServer = this.mcpServer!.getSDKServer();
         await sdkServer.connect(transport);
 
@@ -96,11 +102,6 @@ export class SSETransport implements Transport {
           this.transports.delete(sessionId);
           return;
         }
-
-        // Clean up on disconnect
-        res.on("close", () => {
-          this.transports.delete(sessionId);
-        });
 
       } catch (error) {
         // Clean up transport on connect failure
