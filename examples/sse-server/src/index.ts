@@ -78,10 +78,10 @@ server.registerResource(
 server.registerPrompt("greet", {
   title: "Greeting Prompt",
   description: "Generate a friendly greeting",
-  argsSchema: {
-    name: z.string(),
-    language: z.enum(["english", "spanish", "french"]).default("english")
-  }
+  argsSchema: z.object({
+    name: z.string().describe("Name to greet"),
+    language: z.enum(["english", "spanish", "french"]).default("english").describe("Language for the greeting")
+  })
 }, ({ name, language }) => {
   const greetings: Record<string, string> = {
     english: `Hello, ${name}! How can I help you today?`,
@@ -149,4 +149,7 @@ async function main() {
 }
 
 // Run the server
-main();
+main().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});

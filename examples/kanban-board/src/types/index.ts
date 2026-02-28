@@ -7,7 +7,7 @@ export type Priority = z.infer<typeof PrioritySchema>;
 // Board schemas
 export const CreateBoardSchema = z.object({
   name: z.string().min(1).max(255),
-  description: z.string().optional(),
+  description: z.string().max(2000).optional(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#6366f1'),
 });
 
@@ -35,7 +35,7 @@ export const CreateCardSchema = z.object({
   column_name: z.string().min(1).max(255).optional(),
   column_position: z.number().int().min(0).optional(),
   title: z.string().min(1).max(255),
-  description: z.string().optional(),
+  description: z.string().max(5000).optional(),
   position: z.number().int().min(0).default(0),
   priority: PrioritySchema.default('medium'),
   assigned_to: z.string().max(255).optional(),
@@ -66,7 +66,7 @@ export type CreateTagInput = z.infer<typeof CreateTagSchema>;
 // Comment schemas
 export const CreateCommentSchema = z.object({
   card_id: z.number().int().positive(),
-  content: z.string().min(1),
+  content: z.string().min(1).max(10000),
   author: z.string().max(255).optional(),
 });
 
@@ -107,7 +107,7 @@ export const CardTagSchema = z.object({
 });
 
 export const SearchCardsSchema = z.object({
-  query: z.string().min(1),
+  query: z.string().min(1).max(500),
   board_id: z.number().int().positive().optional(),
   priority: PrioritySchema.optional(),
   assigned_to: z.string().max(255).optional(),

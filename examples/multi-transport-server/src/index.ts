@@ -33,10 +33,10 @@ async function createMultiTransportServer() {
           .describe('Time format (default: iso)')
       })
     },
-    async ({ format = 'iso' }, context) => {
+    async ({ format = 'iso' }) => {
       const now = new Date();
       let timeStr: string;
-      
+
       switch (format) {
         case 'unix':
           timeStr = Math.floor(now.getTime() / 1000).toString();
@@ -49,13 +49,10 @@ async function createMultiTransportServer() {
           timeStr = now.toISOString();
       }
 
-      // Include transport info if available
-      const transportInfo = context.transport ? ` (via ${context.transport})` : '';
-      
       return {
         content: [{
           type: 'text',
-          text: `Current time: ${timeStr}${transportInfo}`
+          text: `Current time: ${timeStr}`
         }]
       };
     }
@@ -68,12 +65,10 @@ async function createMultiTransportServer() {
       description: 'Get information about available tools, resources, and prompts',
       inputSchema: z.object({})
     },
-    async (_, context) => {
+    async () => {
       const capabilities = server.getCapabilities();
-      
+
       const report = [
-        `Transport: ${context.transport || 'unknown'}`,
-        '',
         `Tools (${capabilities.tools.length}):`,
         ...capabilities.tools.map(t => `  - ${t.name}: ${t.description}`),
         '',
@@ -159,12 +154,6 @@ async function main() {
       }
     });
     
-    // Add custom context for HTTP requests
-    httpTransport.getApp()?.use((req, res, next) => {
-      server.setContext({ transport: 'http' });
-      next();
-    });
-    
     server.useTransport(httpTransport);
     console.log(`[Multi-Transport] HTTP transport configured on port ${httpPort}`);
   }
@@ -175,13 +164,8 @@ async function main() {
       logStderr: true
     });
     
-    // Note: stdio transport doesn't have middleware, but we can set context
-    // when the server starts
     server.useTransport(stdioTransport);
     console.error('[Multi-Transport] stdio transport configured');
-    
-    // Set context for stdio
-    server.setContext({ transport: 'stdio' });
   }
   
   // Start the server with all configured transports

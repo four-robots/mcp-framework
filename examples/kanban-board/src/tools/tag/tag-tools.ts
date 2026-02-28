@@ -3,6 +3,7 @@ import {
   CreateTagSchema,
   CardTagSchema,
   ValidationError,
+  NotFoundError,
 } from '../../types/index.js';
 import { createErrorResult, createSuccessResult } from '@tylercoles/mcp-server/dist/tools.js';
 import { KanbanDatabase } from '../../database/index.js';
@@ -67,6 +68,17 @@ export const registerAddCardTagTool = (db: KanbanDatabase, wsServer: KanbanWebSo
   handler: async (args: any): Promise<ToolResult> => {
     try {
       const { card_id, tag_id } = args;
+
+      // Verify card and tag exist
+      const card = await db.getCardById(card_id);
+      if (!card) {
+        throw new NotFoundError('Card', card_id);
+      }
+      const tags = await db.getTags();
+      if (!tags.some(t => t.id === tag_id)) {
+        throw new NotFoundError('Tag', tag_id);
+      }
+
       await db.addCardTag(card_id, tag_id);
 
       return createSuccessResult(`✅ Successfully added tag ${tag_id} to card ${card_id}`);
@@ -86,6 +98,13 @@ export const registerRemoveCardTagTool = (db: KanbanDatabase, wsServer: KanbanWe
   handler: async (args: any): Promise<ToolResult> => {
     try {
       const { card_id, tag_id } = args;
+
+      // Verify card exists
+      const card = await db.getCardById(card_id);
+      if (!card) {
+        throw new NotFoundError('Card', card_id);
+      }
+
       const removed = await db.removeCardTag(card_id, tag_id);
 
       if (!removed) {
