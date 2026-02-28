@@ -212,7 +212,9 @@ export abstract class OAuthProvider extends AuthProvider {
   }
 
   // State storage for PKCE parameters (in-memory for single instance)
-  private pkceStore = new Map<string, PKCEParams>();
+  private static PKCE_TTL = 600000; // 10 minutes
+  private static PKCE_MAX_SIZE = 1000;
+  private pkceStore = new Map<string, { params: PKCEParams; createdAt: number }>();
 
   /**
    * High-level convenience method: Start OAuth flow with automatic PKCE generation
@@ -225,9 +227,12 @@ export abstract class OAuthProvider extends AuthProvider {
   ): Promise<{ authUrl: string; state: string }> {
     // Generate PKCE parameters automatically
     const pkceParams = this.generatePKCEParams();
-    
+
+    // Evict stale entries to prevent unbounded memory growth
+    this.cleanupPKCEStore();
+
     // Store PKCE parameters keyed by state for later retrieval
-    this.pkceStore.set(state, pkceParams);
+    this.pkceStore.set(state, { params: pkceParams, createdAt: Date.now() });
     
     // Get authorization URL with PKCE parameters
     const authUrl = await this.getAuthUrl(state, redirectUri, resource, pkceParams);
@@ -246,18 +251,18 @@ export abstract class OAuthProvider extends AuthProvider {
     resource?: string
   ): Promise<TokenResult> {
     // Retrieve stored PKCE parameters
-    const pkceParams = this.pkceStore.get(state);
-    if (!pkceParams) {
+    const entry = this.pkceStore.get(state);
+    if (!entry) {
       throw new Error('PKCE parameters not found for state. Did you call startOAuthFlow() first?');
     }
-    
+
     try {
       // Exchange code for tokens using stored PKCE verifier
-      const result = await this.handleCallback(code, state, redirectUri, resource, pkceParams.codeVerifier);
-      
+      const result = await this.handleCallback(code, state, redirectUri, resource, entry.params.codeVerifier);
+
       // Clean up stored PKCE parameters
       this.pkceStore.delete(state);
-      
+
       return result;
     } catch (error) {
       // Clean up on error too
@@ -274,6 +279,28 @@ export abstract class OAuthProvider extends AuthProvider {
       this.pkceStore.delete(state);
     } else {
       this.pkceStore.clear();
+    }
+  }
+
+  /**
+   * Remove expired PKCE entries and enforce max store size
+   */
+  private cleanupPKCEStore(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.pkceStore) {
+      if (now - entry.createdAt > OAuthProvider.PKCE_TTL) {
+        this.pkceStore.delete(key);
+      }
+    }
+    // Hard cap to prevent abuse
+    if (this.pkceStore.size >= OAuthProvider.PKCE_MAX_SIZE) {
+      // Remove oldest entries
+      const entries = Array.from(this.pkceStore.entries())
+        .sort((a, b) => a[1].createdAt - b[1].createdAt);
+      const toRemove = entries.slice(0, entries.length - OAuthProvider.PKCE_MAX_SIZE + 1);
+      for (const [key] of toRemove) {
+        this.pkceStore.delete(key);
+      }
     }
   }
 

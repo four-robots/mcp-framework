@@ -195,21 +195,22 @@ export class SSETransport implements Transport {
     }
     this.transports.clear();
 
-    // Stop HTTP server
-    return new Promise((resolve, reject) => {
-      if (!this.server) {
-        resolve();
-        return;
-      }
-
-      this.server.close((err) => {
-        if (err) {
-          reject(err);
-        } else {
+    // Stop HTTP server (with timeout to prevent hanging)
+    if (this.server) {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.warn('SSE server close timed out after 5s, forcing shutdown');
           resolve();
-        }
+        }, 5000);
+        timeout.unref();
+
+        this.server!.close(() => {
+          clearTimeout(timeout);
+          resolve();
+        });
       });
-    });
+      this.server = undefined;
+    }
   }
 
   /**
