@@ -67,8 +67,8 @@ export function loadConfig(): ServerConfig {
       consumerName: process.env.NATS_CONSUMER_NAME || 'mcp-memories-consumer'
     },
     logging: {
-      level: (process.env.LOG_LEVEL as any) || 'info',
-      format: (process.env.LOG_FORMAT as any) || 'json'
+      level: process.env.LOG_LEVEL || 'info',
+      format: process.env.LOG_FORMAT || 'json'
     }
   };
 

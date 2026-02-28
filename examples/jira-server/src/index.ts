@@ -210,7 +210,7 @@ async function createJiraServer() {
             description: "Search for Jira issues using JQL (Jira Query Language)",
             inputSchema: z.object({
                 jql: z.string().describe("JQL query to search for issues"),
-                maxResults: z.number().optional().default(50).describe("Maximum number of results to return"),
+                maxResults: z.number().int().min(1).max(100).optional().default(50).describe("Maximum number of results to return (1-100)"),
             }),
         },
         async ({ jql, maxResults = 50 }) => {
@@ -249,7 +249,7 @@ async function createJiraServer() {
                 assignee: z.string().optional().describe('Username, email, or "currentUser()" for current user. Leave empty for current user.'),
                 status: z.string().optional().describe('Filter by status (e.g., "To Do", "In Progress", "Done")'),
                 project: z.string().optional().describe("Filter by project key"),
-                maxResults: z.number().optional().default(50).describe("Maximum number of results to return"),
+                maxResults: z.number().int().min(1).max(100).optional().default(50).describe("Maximum number of results to return (1-100)"),
             }),
         },
         async ({ assignee, status, project, maxResults = 50 }) => {
