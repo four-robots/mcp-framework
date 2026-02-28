@@ -181,6 +181,11 @@ export class OIDCProvider extends OAuthProvider {
     if (!config.discoveryUrl && (!config.issuer || !config.authorizationEndpoint || !config.tokenEndpoint)) {
       throw new Error('Either discoveryUrl or manual endpoint configuration (issuer, authorizationEndpoint, tokenEndpoint) must be provided');
     }
+
+    // When using ID token verification without discovery, jwksUri is required for signature validation
+    if (!config.discoveryUrl && config.useIdToken && !config.jwksUri) {
+      throw new Error('jwksUri is required when useIdToken is true and discoveryUrl is not provided');
+    }
   }
 
   /**

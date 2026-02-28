@@ -121,10 +121,18 @@ export class HttpTransport implements Transport {
     );
     this.transports = {};
 
-    // Close the HTTP server
+    // Close the HTTP server (with timeout to prevent hanging)
     if (this.server) {
       await new Promise<void>((resolve) => {
-        this.server.close(() => resolve());
+        const timeout = setTimeout(() => {
+          console.warn('HTTP server close timed out after 5s, forcing shutdown');
+          resolve();
+        }, 5000);
+        timeout.unref();
+        this.server.close(() => {
+          clearTimeout(timeout);
+          resolve();
+        });
       });
     }
 

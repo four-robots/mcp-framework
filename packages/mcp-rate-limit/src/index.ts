@@ -299,10 +299,12 @@ export class RateLimitUtils {
    * Extract IP address from request with proxy support
    */
   static getClientIp(req: any): string {
-    return req.ip || 
-           req.connection?.remoteAddress || 
+    // Use req.ip (Express, respects trust proxy) or direct socket address.
+    // Do NOT fall back to x-forwarded-for as it is spoofable without
+    // proper proxy trust configuration.
+    return req.ip ||
+           req.connection?.remoteAddress ||
            req.socket?.remoteAddress ||
-           req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
            '127.0.0.1';
   }
 
@@ -359,23 +361,19 @@ export class HttpRateLimitMiddleware {
           return this.handleRateLimit(req, res, result);
         }
 
-        // Track response status for skip logic
+        // Track response status for skip logic using 'finish' event
+        // This fires for all response methods (send, json, end, etc.)
         if (skipSuccessfulRequests || skipFailedRequests) {
           const store = this.store;
-          const originalSend = res.send;
-          let decremented = false;
-          res.send = function(data: any) {
+          res.on('finish', () => {
             const statusCode = res.statusCode;
             const shouldSkip = (skipSuccessfulRequests && statusCode < 400) ||
                              (skipFailedRequests && statusCode >= 400);
 
-            if (shouldSkip && !decremented) {
-              decremented = true;
+            if (shouldSkip) {
               store.decrement(key).catch(() => {});
             }
-
-            return originalSend.call(this, data);
-          };
+          });
         }
 
         this.addHeaders(res, result, maxRequests);
