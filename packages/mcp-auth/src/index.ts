@@ -440,7 +440,7 @@ export function extractBearerToken(req: Request): string | null {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
-  return authHeader.substring(7);
+  return authHeader.substring(7).trim();
 }
 
 /**

@@ -713,6 +713,8 @@ export class PerformanceTracker {
   /**
    * Start tracking an operation
    */
+  private static STALE_THRESHOLD = 300000; // 5 minutes
+
   startTracking(correlationId: string, operation: string, metadata?: Record<string, any>): void {
     const startTime = performance.now();
     this.metrics.set(correlationId, {
@@ -724,6 +726,16 @@ export class PerformanceTracker {
       success: false,
       metadata
     });
+
+    // Periodic cleanup of stale entries to prevent memory leaks
+    if (this.metrics.size > 100) {
+      const now = performance.now();
+      for (const [id, metric] of this.metrics) {
+        if (now - metric.startTime > PerformanceTracker.STALE_THRESHOLD) {
+          this.metrics.delete(id);
+        }
+      }
+    }
   }
 
   /**
@@ -1395,7 +1407,10 @@ export class MCPServer {
         try {
           const result = await handler(args, tracedContext);
 
-          this.requestTracer.endTrace(tracedContext, true, undefined, JSON.stringify(result).length);
+          const payloadSize = result?.content
+            ? result.content.reduce((sum: number, c: any) => sum + (c.text?.length || c.blob?.length || 0), 0)
+            : 0;
+          this.requestTracer.endTrace(tracedContext, true, undefined, payloadSize);
           return result;
         } catch (error) {
           const mcpError = MCPErrorFactory.fromError(error);
@@ -1995,9 +2010,19 @@ export class MCPServer {
       throw new Error('Server has already been started');
     }
 
-    // Start all transports
-    await Promise.all(this.transports.map(t => t.start(this)));
-    this.started = true;
+    // Start transports sequentially so we can clean up on partial failure
+    const startedTransports: Transport[] = [];
+    try {
+      for (const t of this.transports) {
+        await t.start(this);
+        startedTransports.push(t);
+      }
+      this.started = true;
+    } catch (error) {
+      // Clean up transports that successfully started
+      await Promise.allSettled(startedTransports.map(t => t.stop()));
+      throw error;
+    }
   }
 
   /**

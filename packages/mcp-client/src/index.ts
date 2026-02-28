@@ -733,13 +733,17 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
               });
             }
             if (field.validation?.pattern) {
-              const regex = new RegExp(field.validation.pattern);
-              if (!regex.test(value)) {
-                errors.push({
-                  field: field.name,
-                  message: `${field.label} format is invalid`,
-                  code: 'INVALID_PATTERN'
-                });
+              try {
+                const regex = new RegExp(field.validation.pattern);
+                if (!regex.test(value)) {
+                  errors.push({
+                    field: field.name,
+                    message: `${field.label} format is invalid`,
+                    code: 'INVALID_PATTERN'
+                  });
+                }
+              } catch {
+                // Invalid regex pattern from server, skip validation
               }
             }
           }
