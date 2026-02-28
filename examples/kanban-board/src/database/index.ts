@@ -231,6 +231,15 @@ export class KanbanDatabase {
   }
 
   async deleteBoard(id: number): Promise<boolean> {
+    // Cascade delete: remove comments on cards, card_tags, cards, and columns for this board
+    const cards = await this.getCardsByBoard(id);
+    for (const card of cards) {
+      await this.db.deleteFrom('comments').where('card_id', '=', card.id!).execute();
+      await this.db.deleteFrom('card_tags').where('card_id', '=', card.id!).execute();
+    }
+    await this.db.deleteFrom('cards').where('board_id', '=', id).execute();
+    await this.db.deleteFrom('columns').where('board_id', '=', id).execute();
+
     const result = await this.db
       .deleteFrom('boards')
       .where('id', '=', id)
@@ -284,6 +293,14 @@ export class KanbanDatabase {
   }
 
   async deleteColumn(id: number): Promise<boolean> {
+    // Cascade delete: remove comments and card_tags for cards in this column, then cards
+    const cards = await this.getCardsByColumn(id);
+    for (const card of cards) {
+      await this.db.deleteFrom('comments').where('card_id', '=', card.id!).execute();
+      await this.db.deleteFrom('card_tags').where('card_id', '=', card.id!).execute();
+    }
+    await this.db.deleteFrom('cards').where('column_id', '=', id).execute();
+
     const result = await this.db
       .deleteFrom('columns')
       .where('id', '=', id)
@@ -355,6 +372,10 @@ export class KanbanDatabase {
   }
 
   async deleteCard(id: number): Promise<boolean> {
+    // Cascade delete: remove comments and card_tags for this card
+    await this.db.deleteFrom('comments').where('card_id', '=', id).execute();
+    await this.db.deleteFrom('card_tags').where('card_id', '=', id).execute();
+
     const result = await this.db
       .deleteFrom('cards')
       .where('id', '=', id)

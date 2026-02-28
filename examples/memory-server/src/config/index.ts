@@ -49,14 +49,14 @@ export function loadConfig(): ServerConfig {
     sessionSecret: process.env.SESSION_SECRET || '',
     corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:*'],
     externalDomain: process.env.APP_EXTERNAL_DOMAIN,
-    enableApi: process.env.ENABLE_API,
+    enableApi: process.env.ENABLE_API === 'true',
     auth: {
       oidcUrl: process.env.OIDC_URL || '',
       clientId: process.env.OIDC_CLIENT_ID || '',
       clientSecret: process.env.OIDC_CLIENT_SECRET || '',
       redirectUri: process.env.OIDC_REDIRECT_URI || '',
       scope: process.env.OIDC_SCOPE || 'openid profile email',
-      allowedGroups: process.env.OIDC_ALLOWED_GROUPS || [],
+      allowedGroups: process.env.OIDC_ALLOWED_GROUPS?.split(',').filter(g => g.length > 0) || [],
     },
     nats: {
       servers: process.env.NATS_SERVERS?.split(',') || ['nats://localhost:4222'],

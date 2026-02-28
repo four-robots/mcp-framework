@@ -467,6 +467,4 @@ async function main() {
     process.exit(1);
   }
 }
-console.log(import.meta.url)
-
 main();
