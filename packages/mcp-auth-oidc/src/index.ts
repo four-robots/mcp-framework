@@ -280,6 +280,10 @@ export class OIDCProvider extends OAuthProvider {
   }
 
   private async doFetchDiscovery(): Promise<void> {
+    if (!this.validateHttpsEndpoint(this.config.discoveryUrl!)) {
+      throw new Error('Discovery URL must use HTTPS in production');
+    }
+
     try {
       const response = await fetch(this.config.discoveryUrl!);
       if (!response.ok) {
@@ -534,6 +538,10 @@ export class OIDCProvider extends OAuthProvider {
     const discovery = await this.getDiscovery();
     if (!discovery.jwks_uri) {
       throw new Error('JWKS URI not available in discovery configuration');
+    }
+
+    if (!this.validateHttpsEndpoint(discovery.jwks_uri)) {
+      throw new Error('JWKS URI must use HTTPS in production');
     }
 
     const response = await fetch(discovery.jwks_uri);

@@ -2353,6 +2353,9 @@ export class MCPServer {
     // Map captured groups to variable names, URL-decoding to match populateUriTemplate's encoding
     const params: Record<string, string> = {};
     for (let i = 0; i < varNames.length; i++) {
+      if (match[i + 1] === undefined) {
+        throw MCPErrorFactory.invalidParams(`URI missing value for template parameter '${varNames[i]}'`);
+      }
       params[varNames[i]] = decodeURIComponent(match[i + 1]);
     }
 

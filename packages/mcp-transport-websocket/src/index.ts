@@ -136,7 +136,9 @@ export class WebSocketConnection {
       id: pingMessage.id,
       result: { type: 'pong' }
     };
-    this.send(pongResponse);
+    this.send(pongResponse).catch(err => {
+      console.error('Failed to send pong response:', err);
+    });
   }
 
   private setState(newState: ConnectionState): void {
