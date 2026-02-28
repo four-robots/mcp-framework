@@ -1020,6 +1020,8 @@ export class OIDCProvider extends OAuthProvider {
           (req as any).session.destroy((destroyErr: any) => {
             if (destroyErr) {
               console.error('Failed to destroy session:', destroyErr);
+              res.status(500).json(createOAuthError('server_error', 'Failed to destroy session'));
+              return;
             }
             res.json({ success: true });
           });

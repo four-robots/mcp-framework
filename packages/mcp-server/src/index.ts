@@ -758,7 +758,11 @@ export class PerformanceTracker {
 
     // Notify callback if provided
     if (this.onMetricCompleted) {
-      this.onMetricCompleted(metric);
+      try {
+        this.onMetricCompleted(metric);
+      } catch (error) {
+        console.error('Error in metric completion callback:', error);
+      }
     }
 
     return metric;
@@ -2039,6 +2043,9 @@ export class MCPServer {
       return;
     }
 
+    // Set started to false immediately to reject new requests during shutdown
+    this.started = false;
+
     // Stop all transports - use allSettled so one failure doesn't prevent others from cleaning up
     const results = await Promise.allSettled(this.transports.map(t => t.stop()));
     for (const result of results) {
@@ -2054,8 +2061,6 @@ export class MCPServer {
 
     // Clear any in-flight performance tracking entries
     this.requestTracer.getPerformanceTracker().clearAll();
-
-    this.started = false;
   }
 
   /**
