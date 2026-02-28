@@ -1045,7 +1045,6 @@ export class MCPServer {
   private resourceTemplates: Map<string, ResourceTemplateInfo> = new Map();
   private prompts: Map<string, PromptInfo> = new Map();
   private completionHandlers: Map<string, { config: CompletionConfig; handler: CompletionHandler }> = new Map();
-  private completionRequestHandlerRegistered: boolean = false;
   private samplingConfig: SamplingConfig | null = null;
 
   // Pagination management
