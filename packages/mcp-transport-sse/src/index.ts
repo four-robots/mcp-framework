@@ -190,10 +190,16 @@ export class SSETransport implements Transport {
   }
 
   async stop(): Promise<void> {
-    // Close all transports
-    for (const transport of this.transports.values()) {
-      await transport.close();
-    }
+    // Close all transports (use allSettled so one failure doesn't block the rest)
+    await Promise.allSettled(
+      Array.from(this.transports.values()).map(async (transport) => {
+        try {
+          await transport.close();
+        } catch (error) {
+          console.error('Error closing SSE transport:', error);
+        }
+      })
+    );
     this.transports.clear();
 
     // Stop HTTP server (with timeout to prevent hanging)

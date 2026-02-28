@@ -1015,7 +1015,17 @@ export class OIDCProvider extends OAuthProvider {
           res.status(500).json(createOAuthError('server_error', 'Logout failed'));
           return;
         }
-        res.json({ success: true });
+        // Destroy the session to prevent session fixation
+        if ((req as any).session) {
+          (req as any).session.destroy((destroyErr: any) => {
+            if (destroyErr) {
+              console.error('Failed to destroy session:', destroyErr);
+            }
+            res.json({ success: true });
+          });
+        } else {
+          res.json({ success: true });
+        }
       });
     });
 
