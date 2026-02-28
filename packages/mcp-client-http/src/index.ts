@@ -80,8 +80,8 @@ export class HttpMCPClient extends BaseMCPClient {
       } catch (error) {
         console.error('Error closing transport:', error);
       }
-      this.cleanup();
       this.setConnectionState(ConnectionState.Disconnected);
+      this.cleanup();
     }
   }
 

@@ -60,7 +60,7 @@ export class SSETransport implements Transport {
     if (this.config.enableDnsRebindingProtection) {
       this.app.use((req, res, next) => {
         const host = req.headers.host?.split(":")[0];
-        if (host && !this.config.allowedHosts?.includes(host)) {
+        if (!host || !this.config.allowedHosts?.includes(host)) {
           return res.status(403).json({
             error: "Forbidden: Invalid host"
           });
@@ -165,15 +165,20 @@ export class SSETransport implements Transport {
 
     return new Promise<void>((resolve, reject) => {
       try {
+        const startupErrorHandler = (error: Error) => reject(error);
         this.server = this.app.listen(this.config.port, this.config.host!, () => {
           const address = this.server!.address();
           const actualPort = typeof address === 'string' ? this.config.port : address?.port || this.config.port;
           this.config.port = actualPort!;
+          this.server!.removeListener("error", startupErrorHandler);
+          this.server!.on("error", (error: Error) => {
+            console.error("SSE server error:", error);
+          });
           console.log(`SSE transport listening on http://${this.config.host}:${actualPort}`);
           resolve();
         });
-        
-        this.server.on("error", reject);
+
+        this.server.on("error", startupErrorHandler);
       } catch (error) {
         reject(error);
       }

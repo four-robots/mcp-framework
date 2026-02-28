@@ -190,8 +190,9 @@ export class WebSocketConnection {
         const data = JSON.stringify(message);
         
         // Check message size
-        if (data.length > this.config.maxMessageSize) {
-          reject(new Error(`Message too large: ${data.length} bytes > ${this.config.maxMessageSize} bytes`));
+        const byteLength = Buffer.byteLength(data, 'utf8');
+        if (byteLength > this.config.maxMessageSize) {
+          reject(new Error(`Message too large: ${byteLength} bytes > ${this.config.maxMessageSize} bytes`));
           return;
         }
 
