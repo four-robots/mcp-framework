@@ -140,6 +140,8 @@ const TokenResponseSchema = z.object({
 export class OIDCProvider extends OAuthProvider {
   private config: Required<OIDCConfig>;
   private discoveryCache: OIDCDiscoveryType | null = null;
+  private discoveryCachedAt = 0;
+  private static DISCOVERY_CACHE_TTL = 3600000; // 1 hour
   private jwksCache: { keys: any[]; fetchedAt: number } | null = null;
   private jwksFetchPromise: Promise<any[]> | null = null;
   private passportInitialized = false;
@@ -266,6 +268,7 @@ export class OIDCProvider extends OAuthProvider {
       
       const data = await response.json();
       this.discoveryCache = OIDCDiscoverySchema.parse(data);
+      this.discoveryCachedAt = Date.now();
     } catch (error) {
       console.error('Failed to fetch OIDC discovery:', error);
       throw new Error(`Failed to fetch OIDC configuration: ${error instanceof Error ? error.message : String(error)}`);
@@ -276,10 +279,11 @@ export class OIDCProvider extends OAuthProvider {
    * Get discovery configuration
    */
   private async getDiscovery(): Promise<OIDCDiscoveryType> {
-    if (this.discoveryCache) {
-      return this.discoveryCache;
+    const cacheValid = this.discoveryCache && (Date.now() - this.discoveryCachedAt) < OIDCProvider.DISCOVERY_CACHE_TTL;
+    if (cacheValid) {
+      return this.discoveryCache!;
     }
-    
+
     if (this.config.discoveryUrl) {
       await this.fetchDiscovery();
       return this.discoveryCache!;
@@ -391,7 +395,7 @@ export class OIDCProvider extends OAuthProvider {
       
       // Add basic auth if using client_secret_basic
       if (this.config.clientSecret && this.config.tokenEndpointAuthMethod === 'client_secret_basic') {
-        const credentials = Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`).toString('base64');
+        const credentials = Buffer.from(`${encodeURIComponent(this.config.clientId)}:${encodeURIComponent(this.config.clientSecret)}`).toString('base64');
         headers['Authorization'] = `Basic ${credentials}`;
       }
       
@@ -404,13 +408,9 @@ export class OIDCProvider extends OAuthProvider {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (errorData && typeof errorData === 'object' && 'error' in errorData) {
-          const oauthError = createOAuthError(
-            String(errorData.error || 'server_error'),
-            (errorData as any).error_description ? String((errorData as any).error_description) : undefined,
-            (errorData as any).error_uri ? String((errorData as any).error_uri) : undefined
-          );
-          // Use the original error string directly since createOAuthError might modify it
-          const errorMessage = String(errorData.error || 'server_error');
+          const errorCode = String(errorData.error || 'server_error');
+          const errorDesc = (errorData as any).error_description ? String((errorData as any).error_description) : undefined;
+          const errorMessage = errorDesc ? `${errorCode}: ${errorDesc}` : errorCode;
           throw new Error(errorMessage);
         }
         throw new Error(`Token exchange failed: ${response.statusText}`);
@@ -675,7 +675,7 @@ export class OIDCProvider extends OAuthProvider {
       
       // Add basic auth if using client_secret_basic
       if (this.config.clientSecret && this.config.tokenEndpointAuthMethod === 'client_secret_basic') {
-        const credentials = Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`).toString('base64');
+        const credentials = Buffer.from(`${encodeURIComponent(this.config.clientId)}:${encodeURIComponent(this.config.clientSecret)}`).toString('base64');
         headers['Authorization'] = `Basic ${credentials}`;
       }
       
@@ -688,13 +688,9 @@ export class OIDCProvider extends OAuthProvider {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (errorData && typeof errorData === 'object' && 'error' in errorData) {
-          const oauthError = createOAuthError(
-            String(errorData.error || 'server_error'),
-            (errorData as any).error_description ? String((errorData as any).error_description) : undefined,
-            (errorData as any).error_uri ? String((errorData as any).error_uri) : undefined
-          );
-          // Use the original error string directly since createOAuthError might modify it
-          const errorMessage = String(errorData.error || 'server_error');
+          const errorCode = String(errorData.error || 'server_error');
+          const errorDesc = (errorData as any).error_description ? String((errorData as any).error_description) : undefined;
+          const errorMessage = errorDesc ? `${errorCode}: ${errorDesc}` : errorCode;
           throw new Error(errorMessage);
         }
         throw new Error(`Token refresh failed: ${response.statusText}`);
@@ -755,7 +751,7 @@ export class OIDCProvider extends OAuthProvider {
       
       // Add basic auth if using client_secret_basic
       if (this.config.clientSecret && this.config.tokenEndpointAuthMethod === 'client_secret_basic') {
-        const credentials = Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`).toString('base64');
+        const credentials = Buffer.from(`${encodeURIComponent(this.config.clientId)}:${encodeURIComponent(this.config.clientSecret)}`).toString('base64');
         headers['Authorization'] = `Basic ${credentials}`;
       }
       
@@ -888,13 +884,9 @@ export class OIDCProvider extends OAuthProvider {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (errorData && typeof errorData === 'object' && 'error' in errorData) {
-          const oauthError = createOAuthError(
-            String(errorData.error || 'server_error'),
-            (errorData as any).error_description ? String((errorData as any).error_description) : undefined,
-            (errorData as any).error_uri ? String((errorData as any).error_uri) : undefined
-          );
-          // Use the original error string directly since createOAuthError might modify it
-          const errorMessage = String(errorData.error || 'server_error');
+          const errorCode = String(errorData.error || 'server_error');
+          const errorDesc = (errorData as any).error_description ? String((errorData as any).error_description) : undefined;
+          const errorMessage = errorDesc ? `${errorCode}: ${errorDesc}` : errorCode;
           throw new Error(errorMessage);
         }
         throw new Error(`Client registration failed: ${response.statusText}`);
