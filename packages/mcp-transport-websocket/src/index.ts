@@ -361,19 +361,29 @@ export class WebSocketTransport implements Transport {
     }
     this.connections.clear();
 
-    // Close WebSocket server
+    // Close WebSocket server (with timeout to prevent hanging)
     if (this.wss) {
-      return new Promise((resolve) => {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.warn('WebSocket server close timed out after 5s, forcing shutdown');
+          this.wss = null;
+          this.httpServer = null;
+          resolve();
+        }, 5000);
+        timeout.unref();
+
         this.wss!.close(() => {
           this.wss = null;
-          
+
           // Close HTTP server
           if (this.httpServer) {
             this.httpServer.close(() => {
+              clearTimeout(timeout);
               this.httpServer = null;
               resolve();
             });
           } else {
+            clearTimeout(timeout);
             resolve();
           }
         });

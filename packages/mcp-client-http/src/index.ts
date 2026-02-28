@@ -80,11 +80,18 @@ export class HttpMCPClient extends BaseMCPClient {
    * Disconnect from the MCP server
    */
   async disconnect(): Promise<void> {
+    // Always cancel reconnect and signal intent before checking state,
+    // so a pending reconnect timer doesn't re-establish the connection.
+    this.intentionalDisconnect = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+
     if (!this.isConnected()) {
       return;
     }
 
-    this.intentionalDisconnect = true;
     try {
       await this.client.close();
     } finally {
