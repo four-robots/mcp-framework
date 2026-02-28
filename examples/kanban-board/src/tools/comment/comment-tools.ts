@@ -19,6 +19,13 @@ export const registerAddCommentTool = (db: KanbanDatabase, wsServer: KanbanWebSo
   handler: async (args: any): Promise<ToolResult> => {
     try {
       const input = CreateCommentSchema.parse(args);
+
+      // Verify card exists before adding comment
+      const card = await db.getCardById(input.card_id);
+      if (!card) {
+        throw new NotFoundError('Card', input.card_id);
+      }
+
       const comment = await db.addComment({
         card_id: input.card_id,
         content: input.content,
