@@ -307,8 +307,8 @@ export class HttpTransport implements Transport {
 
     // Handle DELETE requests for session termination
     this.app.delete(basePath, async (req: Request, res: Response) => {
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
       try {
-        const sessionId = req.headers['mcp-session-id'] as string | undefined;
         if (!sessionId || !this.transports[sessionId]) {
           res.status(400).send('Invalid or missing session ID');
           return;
@@ -321,6 +321,9 @@ export class HttpTransport implements Transport {
         delete this.transports[sessionId];
 
       } catch (error) {
+        if (sessionId) {
+          delete this.transports[sessionId];
+        }
         console.error('MCP DELETE request failed:', error);
         if (!res.headersSent) {
           res.status(500).send('Internal server error');

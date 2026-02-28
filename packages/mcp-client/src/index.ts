@@ -499,6 +499,7 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
           this.setConnectionState(ConnectionState.Error, err);
         });
       }, this.config.heartbeatInterval);
+      this.heartbeatTimer.unref();
     }
   }
 
@@ -546,6 +547,7 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
         }
       }
     }, delay);
+    this.reconnectTimer.unref();
   }
 
   /**

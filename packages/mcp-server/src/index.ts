@@ -1466,7 +1466,9 @@ export class MCPServer {
         const result = await handler(uri, params);
 
         // End tracing successfully
-        this.requestTracer.endTrace(tracedContext, true, undefined, JSON.stringify(result).length);
+        let payloadSize = 0;
+        try { payloadSize = JSON.stringify(result).length; } catch { /* circular or non-serializable */ }
+        this.requestTracer.endTrace(tracedContext, true, undefined, payloadSize);
 
         return result;
       } catch (error) {
@@ -1537,7 +1539,9 @@ export class MCPServer {
         const result = await handler(args);
 
         // End tracing successfully
-        this.requestTracer.endTrace(tracedContext, true, undefined, JSON.stringify(result).length);
+        let promptPayloadSize = 0;
+        try { promptPayloadSize = JSON.stringify(result).length; } catch { /* circular or non-serializable */ }
+        this.requestTracer.endTrace(tracedContext, true, undefined, promptPayloadSize);
 
         return result;
       } catch (error) {
@@ -2318,7 +2322,7 @@ export class MCPServer {
     // Convert URI template to regex pattern
     // First escape regex metacharacters in static parts, then replace template vars
     const regexPattern = uriTemplate
-      .replace(/([.+?^${}()|[\]\\])/g, (match, char) => {
+      .replace(/([.*+?^${}()|[\]\\])/g, (match, char) => {
         // Don't escape braces that are part of template variables
         if (char === '{' || char === '}') return char;
         return '\\' + char;
