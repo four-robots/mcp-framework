@@ -1064,56 +1064,56 @@ export const Providers = {
   /**
    * Create Auth0 provider
    */
-  Auth0: (domain: string, clientId: string, clientSecret?: string, config?: Partial<OIDCConfig>) => 
+  Auth0: (domain: string, clientId: string, clientSecret?: string, config?: Partial<OIDCConfig>) =>
     new OIDCProvider({
+      ...config,
       discoveryUrl: `https://${domain}/.well-known/openid-configuration`,
       clientId,
       clientSecret,
-      ...config,
     }),
-  
+
   /**
    * Create Okta provider
    */
   Okta: (domain: string, clientId: string, clientSecret?: string, config?: Partial<OIDCConfig>) =>
     new OIDCProvider({
+      ...config,
       discoveryUrl: `https://${domain}/.well-known/openid-configuration`,
       clientId,
       clientSecret,
-      ...config,
     }),
-  
+
   /**
    * Create Keycloak provider
    */
   Keycloak: (baseUrl: string, realm: string, clientId: string, clientSecret?: string, config?: Partial<OIDCConfig>) =>
     new OIDCProvider({
+      ...config,
       discoveryUrl: `${baseUrl}/realms/${realm}/.well-known/openid-configuration`,
       clientId,
       clientSecret,
-      ...config,
     }),
-  
+
   /**
    * Create Google provider
    */
   Google: (clientId: string, clientSecret: string, config?: Partial<OIDCConfig>) =>
     new OIDCProvider({
+      ...config,
       discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
       clientId,
       clientSecret,
-      ...config,
     }),
-  
+
   /**
    * Create Microsoft/Azure AD provider
    */
   Microsoft: (tenantId: string, clientId: string, clientSecret?: string, config?: Partial<OIDCConfig>) =>
     new OIDCProvider({
+      ...config,
       discoveryUrl: `https://login.microsoftonline.com/${tenantId}/v2.0/.well-known/openid-configuration`,
       clientId,
       clientSecret,
-      ...config,
     }),
 
   /**
@@ -1121,9 +1121,9 @@ export const Providers = {
    */
   Authentik: (baseUrl: string, applicationSlug: string, clientId: string, clientSecret?: string, config?: Partial<OIDCConfig>) =>
     new OIDCProvider({
+      ...config,
       discoveryUrl: `${baseUrl}/application/o/${applicationSlug}/.well-known/openid-configuration`,
       clientId,
       clientSecret,
-      ...config,
     }),
 };

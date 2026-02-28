@@ -62,6 +62,8 @@ export class StdioMCPClient extends BaseMCPClient {
     }
 
     this.intentionalDisconnect = false;
+    this.setConnectionState(ConnectionState.Connecting);
+
     if (this.needsFreshTransport) {
       this.transport = new StdioClientTransport({
         command: this.stdioConfig.command,
@@ -80,6 +82,7 @@ export class StdioMCPClient extends BaseMCPClient {
       this.setConnectionState(ConnectionState.Connected);
     } catch (error) {
       this.needsFreshTransport = true;
+      this.setConnectionState(ConnectionState.Error, error as Error);
       throw error;
     }
   }
