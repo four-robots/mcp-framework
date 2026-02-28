@@ -1333,9 +1333,13 @@ export class MCPServer {
         throw MCPErrorFactory.invalidParams('Tool name must be a non-empty string');
       }
       
+      if (!maybeConfig || !maybeHandler) {
+        throw MCPErrorFactory.invalidParams('Tool config and handler are required when using string name');
+      }
+
       const name = nameOrModule;
-      const config = maybeConfig!;
-      const handler = maybeHandler!;
+      const config = maybeConfig;
+      const handler = maybeHandler;
 
       this.registerToolInternal(name, config, handler);
       return;
@@ -1589,7 +1593,10 @@ export class MCPServer {
 
         // Handle enum values before type-based matching
         if (propSchema.enum && Array.isArray(propSchema.enum) && propSchema.enum.length > 0) {
-          zodType = z.enum(propSchema.enum as [string, ...string[]]);
+          const allStrings = propSchema.enum.every((v: unknown) => typeof v === 'string');
+          zodType = allStrings
+            ? z.enum(propSchema.enum as [string, ...string[]])
+            : z.union(propSchema.enum.map((v: unknown) => z.literal(v as z.Primitive)) as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
         } else {
           switch (propSchema.type) {
             case 'string':
