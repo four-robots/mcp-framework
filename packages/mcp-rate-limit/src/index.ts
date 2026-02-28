@@ -655,12 +655,16 @@ export class WebSocketRateLimitManager {
       connection.on('close', cleanup);
       connection.on('error', cleanup);
     } else {
-      // No event support - schedule periodic cleanup check
-      setTimeout(() => {
+      // No event support - schedule recurring cleanup check
+      const checkInterval = setInterval(() => {
         if (typeof connection.readyState !== 'undefined' && connection.readyState > 1) {
           cleanup();
+          clearInterval(checkInterval);
         }
       }, 30000);
+      if (checkInterval.unref) {
+        checkInterval.unref();
+      }
     }
   }
 
