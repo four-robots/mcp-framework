@@ -363,12 +363,14 @@ export class HttpRateLimitMiddleware {
         if (skipSuccessfulRequests || skipFailedRequests) {
           const store = this.store;
           const originalSend = res.send;
+          let decremented = false;
           res.send = function(data: any) {
             const statusCode = res.statusCode;
             const shouldSkip = (skipSuccessfulRequests && statusCode < 400) ||
                              (skipFailedRequests && statusCode >= 400);
 
-            if (shouldSkip) {
+            if (shouldSkip && !decremented) {
+              decremented = true;
               store.decrement(key).catch(() => {});
             }
 

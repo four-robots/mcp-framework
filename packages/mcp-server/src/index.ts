@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { ResourceMetadata, McpServer as SDKMcpServer, ToolCallback, ResourceTemplate as SDKResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol";
 import { CallToolResult, ServerNotification, ServerRequest, CompleteRequestSchema, CreateMessageRequestSchema, CompleteResult, CreateMessageResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
@@ -1144,8 +1144,10 @@ export class MCPServer {
       const decoded = JSON.parse(Buffer.from(cursorString, 'base64').toString());
       const { payload, signature } = decoded;
 
-      // Verify signature
-      if (this.createHMAC(payload) !== signature) {
+      // Verify signature using constant-time comparison
+      const expected = Buffer.from(this.createHMAC(payload), 'utf8');
+      const actual = Buffer.from(signature, 'utf8');
+      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
         return null;
       }
 
@@ -1177,7 +1179,7 @@ export class MCPServer {
     options: PaginationOptions = {}
   ): PaginatedResult<T> {
     const limit = Math.min(
-      options.limit || this.paginationDefaults.defaultPageSize,
+      options.limit ?? this.paginationDefaults.defaultPageSize,
       this.paginationDefaults.maxPageSize
     );
 
