@@ -36,6 +36,7 @@ export class StdioMCPClient extends BaseMCPClient {
   private client: Client;
   private transport: StdioClientTransport;
   private stdioConfig: StdioClientConfig;
+  private needsFreshTransport = false;
 
   constructor(config: StdioClientConfig) {
     super(config);
@@ -46,7 +47,6 @@ export class StdioMCPClient extends BaseMCPClient {
       env: config.env,
       cwd: config.cwd
     });
-
     this.client = new Client({
       name: "stdio-mcp-client",
       version: "1.0.0"
@@ -62,6 +62,19 @@ export class StdioMCPClient extends BaseMCPClient {
     }
 
     this.intentionalDisconnect = false;
+    if (this.needsFreshTransport) {
+      this.transport = new StdioClientTransport({
+        command: this.stdioConfig.command,
+        args: this.stdioConfig.args || [],
+        env: this.stdioConfig.env,
+        cwd: this.stdioConfig.cwd
+      });
+      this.client = new Client({
+        name: "stdio-mcp-client",
+        version: "1.0.0"
+      });
+    }
+
     await this.client.connect(this.transport);
     this.setConnectionState(ConnectionState.Connected);
   }
@@ -85,6 +98,7 @@ export class StdioMCPClient extends BaseMCPClient {
       } catch (error) {
         console.error('Error closing transport:', error);
       }
+      this.needsFreshTransport = true;
       this.setConnectionState(ConnectionState.Disconnected);
       this.cleanup();
     }

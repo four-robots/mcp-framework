@@ -34,6 +34,7 @@ export class HttpMCPClient extends BaseMCPClient {
   private client: Client;
   private transport: StreamableHTTPClientTransport;
   private httpConfig: HttpClientConfig;
+  private needsFreshTransport = false;
 
   constructor(config: HttpClientConfig) {
     super(config);
@@ -41,7 +42,6 @@ export class HttpMCPClient extends BaseMCPClient {
     this.transport = new StreamableHTTPClientTransport(
       new URL(config.url)
     );
-
     this.client = new Client({
       name: "http-mcp-client",
       version: "1.0.0"
@@ -57,6 +57,16 @@ export class HttpMCPClient extends BaseMCPClient {
     }
 
     this.intentionalDisconnect = false;
+    if (this.needsFreshTransport) {
+      this.transport = new StreamableHTTPClientTransport(
+        new URL(this.httpConfig.url)
+      );
+      this.client = new Client({
+        name: "http-mcp-client",
+        version: "1.0.0"
+      });
+    }
+
     await this.client.connect(this.transport);
     this.setConnectionState(ConnectionState.Connected);
   }
@@ -80,6 +90,7 @@ export class HttpMCPClient extends BaseMCPClient {
       } catch (error) {
         console.error('Error closing transport:', error);
       }
+      this.needsFreshTransport = true;
       this.setConnectionState(ConnectionState.Disconnected);
       this.cleanup();
     }
