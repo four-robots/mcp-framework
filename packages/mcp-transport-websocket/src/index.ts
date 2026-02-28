@@ -330,6 +330,11 @@ export class WebSocketTransport implements Transport {
       perMessageDeflate: this.config.enablePerMessageDeflate
     });
 
+    // Handle server-level errors to prevent uncaught exception crashes
+    this.wss.on('error', (error: Error) => {
+      console.error('WebSocket server error:', error);
+    });
+
     // Handle new connections
     this.wss.on('connection', (ws, request) => {
       this.handleConnection(ws, request);
