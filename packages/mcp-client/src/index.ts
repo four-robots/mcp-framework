@@ -735,7 +735,7 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
                 code: 'MAX_LENGTH'
               });
             }
-            if (field.validation?.pattern) {
+            if (field.validation?.pattern && field.validation.pattern.length <= 200) {
               try {
                 const regex = new RegExp(field.validation.pattern);
                 if (!regex.test(value)) {
