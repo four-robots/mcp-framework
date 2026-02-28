@@ -38,7 +38,15 @@
     "prebuild": "rimraf --glob packages/**/tsconfig.tsbuildinfo examples/**/tsconfig.tsbuildinfo packages/**/dist examples/**/dist",
     "ws": "npm --workspaces",
     "ws:info": "npm ls --depth=0",
-    "security:audit": "npx tsx tools/security-audit.ts"
+    "security:audit": "npx tsx tools/security-audit.ts",
+    "validate": "npm run build:order && npx lint-staged && npm run typecheck && npm test",
+    "validate:full": "npm run build:order && npm run lint && npm run typecheck && npm run test:coverage",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "packages/**/*.ts": [
+      "eslint --max-warnings 0"
+    ]
   },
   "devDependencies": {
     "@playwright/test": "^1.54.1",
@@ -47,6 +55,8 @@
     "@typescript-eslint/parser": "^6.0.0",
     "@vitest/ui": "^2.1.8",
     "eslint": "^8.57.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "prettier": "^3.1.0",
     "rimraf": "^5.0.5",
     "ts-node": "^10.9.0",
