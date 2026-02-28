@@ -445,6 +445,10 @@ export class HttpTransport implements Transport {
       throw new Error('Transport not started yet');
     }
 
+    if (requireAuth && !this.authProvider) {
+      console.warn(`registerRouter('${path}') called with requireAuth=true but no auth provider is configured`);
+    }
+
     if (requireAuth && this.authProvider) {
       // Apply auth middleware to the router
       router.use(this.createAuthMiddleware());
@@ -460,6 +464,10 @@ export class HttpTransport implements Transport {
    */
   createRouter(requireAuth = false): Router {
     const router = Router();
+
+    if (requireAuth && !this.authProvider) {
+      console.warn('createRouter called with requireAuth=true but no auth provider is configured');
+    }
 
     if (requireAuth && this.authProvider) {
       router.use(this.createAuthMiddleware());
