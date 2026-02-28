@@ -75,8 +75,13 @@ export class StdioMCPClient extends BaseMCPClient {
       });
     }
 
-    await this.client.connect(this.transport);
-    this.setConnectionState(ConnectionState.Connected);
+    try {
+      await this.client.connect(this.transport);
+      this.setConnectionState(ConnectionState.Connected);
+    } catch (error) {
+      this.needsFreshTransport = true;
+      throw error;
+    }
   }
 
   /**

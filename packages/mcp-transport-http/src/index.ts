@@ -108,11 +108,17 @@ export class HttpTransport implements Transport {
    */
   async stop(): Promise<void> {
     // Close all transports
-    for (const transport of Object.values(this.transports)) {
-      if (transport.close) {
-        transport.close();
-      }
-    }
+    await Promise.allSettled(
+      Object.values(this.transports).map(async (transport) => {
+        if (transport.close) {
+          try {
+            await transport.close();
+          } catch (error) {
+            console.error('Error closing transport:', error);
+          }
+        }
+      })
+    );
     this.transports = {};
 
     // Close the HTTP server

@@ -367,11 +367,11 @@ export class DevAuth extends AuthProvider {
   constructor(mockUser?: Partial<User>) {
     super();
     this.mockUser = {
+      ...mockUser,
       id: mockUser?.id || 'dev-user-123',
       username: mockUser?.username || 'developer',
       email: mockUser?.email || 'dev@example.com',
       groups: mockUser?.groups || ['developers'],
-      ...mockUser
     };
   }
   
