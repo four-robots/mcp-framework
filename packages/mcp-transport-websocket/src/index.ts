@@ -151,6 +151,7 @@ export class WebSocketConnection {
           this.ws.ping();
         }
       }, this.config.heartbeatInterval);
+      this.heartbeatTimer.unref();
     }
   }
 
@@ -210,9 +211,10 @@ export class WebSocketConnection {
    * Send an error response
    */
   sendError(code: number, message: string, id?: string | number | null): Promise<void> {
+    // Per JSON-RPC 2.0 spec, id MUST be null when the id could not be detected
     const errorResponse = {
       jsonrpc: '2.0' as const,
-      id: id ?? 'auto-generated-id',
+      id: (id ?? null) as string | number,
       error: {
         code,
         message
