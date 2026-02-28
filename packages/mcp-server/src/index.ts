@@ -2052,6 +2052,9 @@ export class MCPServer {
       this.sessionManager.stop();
     }
 
+    // Clear any in-flight performance tracking entries
+    this.requestTracer.getPerformanceTracker().clearAll();
+
     this.started = false;
   }
 
