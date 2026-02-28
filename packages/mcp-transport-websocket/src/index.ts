@@ -181,6 +181,10 @@ export class WebSocketConnection {
       clearTimeout(this.connectionTimeout);
       this.connectionTimeout = undefined;
     }
+    // Remove WebSocket event listeners to prevent memory leaks
+    if (typeof this.ws.removeAllListeners === 'function') {
+      this.ws.removeAllListeners();
+    }
     this.messageHandlers.clear();
     this.stateChangeHandlers.clear();
   }
@@ -223,14 +227,14 @@ export class WebSocketConnection {
    */
   sendError(code: number, message: string, id?: string | number | null): Promise<void> {
     // Per JSON-RPC 2.0 spec, id MUST be null when the id could not be detected
-    const errorResponse = {
-      jsonrpc: '2.0' as const,
-      id: (id ?? null) as string | number,
+    const errorResponse: JSONRPCMessage = {
+      jsonrpc: '2.0',
+      id: id ?? null,
       error: {
         code,
         message
       }
-    };
+    } as any;
     return this.send(errorResponse);
   }
 
@@ -324,6 +328,10 @@ export class WebSocketTransport implements Transport {
    * Start the WebSocket transport
    */
   async start(server: MCPServer): Promise<void> {
+    if (this.wss) {
+      throw new Error('WebSocket transport already started');
+    }
+
     this.mcpServer = server;
 
     // Create HTTP server if not provided
