@@ -41,7 +41,8 @@ export class WebSocketConnection {
   private messageHandlers: Set<(message: JSONRPCMessage) => void> = new Set();
   private stateChangeHandlers: Set<(state: ConnectionState) => void> = new Set();
   private readonly config: Required<WebSocketConfig>;
-  
+  public readonly createdAt: number = Date.now();
+
   constructor(ws: WebSocket, config: Required<WebSocketConfig>) {
     this.ws = ws;
     this.config = config;
