@@ -11,10 +11,14 @@ async function main() {
   const OIDC_URL = process.env.OIDC_URL || 'https://auth.example.com';
   const CLIENT_ID = process.env.CLIENT_ID || 'echo-server';
   const CLIENT_SECRET = process.env.CLIENT_SECRET; // Optional for public clients
-  const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-production';
+  const SESSION_SECRET = process.env.SESSION_SECRET;
 
   if (!process.env.OIDC_URL || !process.env.CLIENT_ID) {
     console.warn('Warning: OIDC_URL and CLIENT_ID should be set via environment variables');
+  }
+
+  if (!SESSION_SECRET) {
+    throw new Error('SESSION_SECRET environment variable is required for OAuth');
   }
 
   // Create the server

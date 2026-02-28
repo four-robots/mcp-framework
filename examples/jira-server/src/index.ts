@@ -166,6 +166,15 @@ async function createJiraServer() {
         version: "1.0.0",
     });
 
+    // Validate Jira issue key format (e.g., PROJ-123)
+    const isValidIssueKey = (key: string): boolean => /^[A-Z][A-Z0-9_]+-\d+$/.test(key);
+
+    // Validate Jira project key format (e.g., PROJ)
+    const isValidProjectKey = (key: string): boolean => /^[A-Z][A-Z0-9_]+$/.test(key);
+
+    // Escape user input for safe JQL string interpolation
+    const escapeJql = (value: string): string => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
     // Helper function to make Jira API requests
     const makeJiraRequest = async <T = any>(endpoint: string, method: string = "GET", body?: any): Promise<T> => {
         const url = `${config.baseUrl}/rest/api/3${endpoint}`;
@@ -253,8 +262,7 @@ async function createJiraServer() {
                     if (assignee.toLowerCase() === "currentuser()" || assignee === "") {
                         jqlParts.push("assignee = currentUser()");
                     } else {
-                        // Handle both username and email formats
-                        jqlParts.push(`assignee = "${assignee}"`);
+                        jqlParts.push(`assignee = "${escapeJql(assignee)}"`);
                     }
                 } else {
                     jqlParts.push("assignee = currentUser()");
@@ -262,12 +270,15 @@ async function createJiraServer() {
 
                 // Status filter
                 if (status) {
-                    jqlParts.push(`status = "${status}"`);
+                    jqlParts.push(`status = "${escapeJql(status)}"`);
                 }
 
                 // Project filter
                 if (project) {
-                    jqlParts.push(`project = "${project}"`);
+                    if (!isValidProjectKey(project)) {
+                        throw new Error(`Invalid project key format: "${project}". Expected uppercase letters/digits (e.g., PROJ)`);
+                    }
+                    jqlParts.push(`project = "${escapeJql(project)}"`);
                 }
 
                 const jql = jqlParts.join(" AND ");
@@ -329,6 +340,9 @@ async function createJiraServer() {
         },
         async ({ issueKey }) => {
             try {
+                if (!isValidIssueKey(issueKey)) {
+                    throw new Error(`Invalid issue key format: "${issueKey}". Expected format: PROJECT-123`);
+                }
                 const issue = await makeJiraRequest<JiraIssue>(`/issue/${issueKey}`);
 
                 let details = `Issue: ${issue.key}\nSummary: ${issue.fields.summary}\nStatus: ${issue.fields.status.name}\nType: ${issue.fields.issuetype.name}\nPriority: ${issue.fields.priority?.name || "None"}\nAssignee: ${issue.fields.assignee?.displayName || "Unassigned"}\nReporter: ${issue.fields.reporter?.displayName || "Unknown"}\nCreated: ${new Date(issue.fields.created).toLocaleDateString()}\nUpdated: ${new Date(issue.fields.updated).toLocaleDateString()}\n\nDescription:\n${issue.fields.description?.content?.[0]?.content?.[0]?.text || "No description"}`;
@@ -408,6 +422,9 @@ async function createJiraServer() {
         },
         async ({ projectKey, summary, description, issueType, priority = "Medium", customFields }) => {
             try {
+                if (!isValidProjectKey(projectKey)) {
+                    throw new Error(`Invalid project key format: "${projectKey}". Expected uppercase letters/digits (e.g., PROJ)`);
+                }
                 const issueData: any = {
                     fields: {
                         project: { key: projectKey },
@@ -518,6 +535,9 @@ async function createJiraServer() {
         },
         async ({ issueKey, summary, description, status, customFields }) => {
             try {
+                if (!isValidIssueKey(issueKey)) {
+                    throw new Error(`Invalid issue key format: "${issueKey}". Expected format: PROJECT-123`);
+                }
                 const updateData: any = { fields: {} };
 
                 if (summary) updateData.fields.summary = summary;
@@ -636,6 +656,9 @@ async function createJiraServer() {
         },
         async ({ issueKey, comment }) => {
             try {
+                if (!isValidIssueKey(issueKey)) {
+                    throw new Error(`Invalid issue key format: "${issueKey}". Expected format: PROJECT-123`);
+                }
                 const commentData = {
                     body: {
                         type: "doc",
@@ -726,6 +749,9 @@ async function createJiraServer() {
         },
         async ({ projectKey }) => {
             try {
+                if (!isValidProjectKey(projectKey)) {
+                    throw new Error(`Invalid project key format: "${projectKey}". Expected uppercase letters/digits (e.g., PROJ)`);
+                }
                 const project = await makeJiraRequest<JiraProject>(`/project/${projectKey}`);
 
                 const typesList = project.issueTypes.map((type) => `• ${type.name}: ${type.description || "No description"}`).join("\n");
@@ -836,6 +862,9 @@ async function createJiraServer() {
         },
         async ({ issueKey, fieldNames }) => {
             try {
+                if (!isValidIssueKey(issueKey)) {
+                    throw new Error(`Invalid issue key format: "${issueKey}". Expected format: PROJECT-123`);
+                }
                 const issue = await makeJiraRequest<JiraIssue>(`/issue/${issueKey}`);
                 const fields = issue.fields;
 
@@ -943,6 +972,9 @@ async function createJiraServer() {
         },
         async ({ issueKey, fieldId, value, valueType }) => {
             try {
+                if (!isValidIssueKey(issueKey)) {
+                    throw new Error(`Invalid issue key format: "${issueKey}". Expected format: PROJECT-123`);
+                }
                 // Get field metadata to understand the field type
                 const allFields = await makeJiraRequest<JiraField[]>("/field");
                 let fieldMeta = allFields.find((f) => f.id === fieldId || f.name === fieldId);

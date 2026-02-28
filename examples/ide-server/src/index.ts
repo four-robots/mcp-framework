@@ -67,7 +67,14 @@ class IdeMCPServer {
                 transport: 'http',
                 http: {
                     url: process.env.SERENA_URL || 'http://localhost:3000/mcp',
-                    headers: process.env.SERENA_HEADERS ? JSON.parse(process.env.SERENA_HEADERS) : undefined
+                    headers: process.env.SERENA_HEADERS ? (() => {
+                        try {
+                            return JSON.parse(process.env.SERENA_HEADERS!);
+                        } catch {
+                            console.error('Failed to parse SERENA_HEADERS as JSON, ignoring');
+                            return undefined;
+                        }
+                    })() : undefined
                 }
             };
         }
@@ -666,7 +673,9 @@ trim_trailing_whitespace = false
 
     private async gitStatus(args: any) {
         try {
-            const result = await this.execCommand("git", ["status", args.porcelain ? "--porcelain" : ""], { cwd: args.projectPath });
+            const gitArgs = ["status"];
+            if (args.porcelain) gitArgs.push("--porcelain");
+            const result = await this.execCommand("git", gitArgs, { cwd: args.projectPath });
             
             return {
                 content: [{

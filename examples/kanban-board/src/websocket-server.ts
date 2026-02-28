@@ -359,15 +359,17 @@ export class KanbanWebSocketServer {
   }
 
   private sendResponse(client: ConnectedClient, type: string, payload?: any, id?: string): void {
+    if (client.ws.readyState !== WebSocket.OPEN) return;
     const response: WebSocketResponse = { type, payload, id };
     client.ws.send(JSON.stringify(response));
   }
 
   private sendError(client: ConnectedClient, message: string, id?: string): void {
-    const response: WebSocketResponse = { 
-      type: 'error', 
-      payload: { message }, 
-      id 
+    if (client.ws.readyState !== WebSocket.OPEN) return;
+    const response: WebSocketResponse = {
+      type: 'error',
+      payload: { message },
+      id
     };
     client.ws.send(JSON.stringify(response));
   }
