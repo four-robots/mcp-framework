@@ -697,7 +697,7 @@ export class WebSocketRateLimitManager {
 
     for (const connections of this.activeConnections.values()) {
       for (const connection of connections) {
-        const createdAt = connection.createdAt || Date.now();
+        const createdAt = connection.createdAt || 0;
         if (createdAt < oldestTime) {
           oldestTime = createdAt;
           oldestConnection = connection;

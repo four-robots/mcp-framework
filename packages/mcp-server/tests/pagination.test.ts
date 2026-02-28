@@ -234,7 +234,7 @@ describe('MCP Pagination System', () => {
               name: z.string().describe('Input text')
             })
           },
-          async () => { messages: [{ role: 'user', content: { type: 'text', text: `Prompt ${i}` } }] }
+          async () => ({ messages: [{ role: 'user', content: { type: 'text', text: `Prompt ${i}` } }] })
         );
       }
     });
