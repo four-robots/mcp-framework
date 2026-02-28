@@ -149,12 +149,13 @@ describe('Additional Auth Providers', () => {
       expect(user).toBeNull();
     });
 
-    it('should reject case-insensitive Bearer (implementation is case-sensitive)', async () => {
+    it('should accept case-insensitive Bearer prefix per RFC 7235', async () => {
       const provider = new TestBearerTokenAuth();
       mockRequest.headers.authorization = 'bearer valid-token';
-      
+
       const user = await provider.authenticate(mockRequest);
-      expect(user).toBeNull(); // Should be null because BearerTokenAuth requires exact case "Bearer "
+      expect(user).not.toBeNull();
+      expect(user?.id).toBe('token-user-123');
     });
 
     it('should extract token and call verifyToken with expected audience', async () => {

@@ -64,8 +64,12 @@ export class StdioTransport implements Transport {
       return;
     }
 
-    // The stdio transport doesn't have a specific close method
-    // Just clean up our references
+    // Close the underlying transport before cleaning up references
+    try {
+      await this.transport.close();
+    } catch {
+      // Ignore close errors to ensure cleanup completes
+    }
     this.transport = null;
     this.server = null;
 

@@ -74,7 +74,14 @@ export class SSETransport implements Transport {
     }
   }
 
+  private routesSetup = false;
+
   private setupRoutes(): void {
+    if (this.routesSetup) {
+      return;
+    }
+    this.routesSetup = true;
+
     const basePath = this.config.basePath!;
 
     // SSE endpoint for server-to-client messages
@@ -90,7 +97,11 @@ export class SSETransport implements Transport {
           this.transports.delete(sessionId);
         });
 
-        const sdkServer = this.mcpServer!.getSDKServer();
+        if (!this.mcpServer) {
+          res.status(503).json({ error: "Server not initialized" });
+          return;
+        }
+        const sdkServer = this.mcpServer.getSDKServer();
         await sdkServer.connect(transport);
 
         // Now that the transport is connected, register it and notify the client
@@ -164,6 +175,10 @@ export class SSETransport implements Transport {
   }
 
   async start(server: MCPServer): Promise<void> {
+    if (this.server) {
+      throw new Error('SSE transport already started');
+    }
+
     this.mcpServer = server;
     this.setupRoutes();
 

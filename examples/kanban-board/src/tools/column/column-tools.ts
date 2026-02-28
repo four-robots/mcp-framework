@@ -21,6 +21,12 @@ export const registerCreateColumnTool = (db: KanbanDatabase, wsServer: KanbanWeb
     try {
       const input = CreateColumnSchema.safeParse(args);
       if (input.success) {
+        // Verify board exists before creating column
+        const board = await db.getBoardById(input.data.board_id);
+        if (!board) {
+          throw new NotFoundError('Board', input.data.board_id);
+        }
+
         const column = await db.createColumn(input.data as any);
 
         // Broadcast the column creation to all clients connected to this board
