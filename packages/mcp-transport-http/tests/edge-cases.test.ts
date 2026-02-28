@@ -135,7 +135,7 @@ describe('HttpTransport Edge Cases', () => {
       await transport.start(server);
       
       // Clear transports manually
-      (transport as any).transports = {};
+      (transport as any).transports = new Map();
       
       // Should not throw
       await expect(transport.stop()).resolves.not.toThrow();

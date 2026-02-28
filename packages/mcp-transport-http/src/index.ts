@@ -52,7 +52,7 @@ export class HttpTransport implements Transport {
   private app: Application | null = null;
   private server: any = null;
   private mcpServer: MCPServer | null = null;
-  private transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+  private transports: Map<string, StreamableHTTPServerTransport> = new Map();
   private authProvider: AuthProvider | null = null;
   private rateLimitMiddleware: HttpRateLimitMiddleware | null = null;
 
@@ -109,17 +109,15 @@ export class HttpTransport implements Transport {
   async stop(): Promise<void> {
     // Close all transports
     await Promise.allSettled(
-      Object.values(this.transports).map(async (transport) => {
-        if (transport.close) {
-          try {
-            await transport.close();
-          } catch (error) {
-            console.error('Error closing transport:', error);
-          }
+      Array.from(this.transports.values()).map(async (transport) => {
+        try {
+          await transport.close();
+        } catch (error) {
+          console.error('Error closing transport:', error);
         }
       })
     );
-    this.transports = {};
+    this.transports.clear();
 
     // Close the HTTP server (with timeout to prevent hanging)
     if (this.server) {
@@ -230,16 +228,16 @@ export class HttpTransport implements Transport {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         let transport: StreamableHTTPServerTransport;
 
-        if (sessionId && this.transports[sessionId]) {
+        if (sessionId && this.transports.has(sessionId)) {
           // Reuse existing transport
-          transport = this.transports[sessionId];
+          transport = this.transports.get(sessionId)!;
         } else {
           // Create new transport for new session
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (newSessionId) => {
               // Store the transport by session ID
-              this.transports[newSessionId] = transport;
+              this.transports.set(newSessionId, transport);
             },
             enableDnsRebindingProtection: this.config.enableDnsRebindingProtection,
             allowedHosts: this.config.allowedHosts,
@@ -249,7 +247,7 @@ export class HttpTransport implements Transport {
           // Clean up transport when closed
           transport.onclose = () => {
             if (transport.sessionId) {
-              delete this.transports[transport.sessionId];
+              this.transports.delete(transport.sessionId);
             }
           };
 
@@ -260,7 +258,7 @@ export class HttpTransport implements Transport {
           } catch (connectError) {
             // Clean up the broken transport on connect failure
             if (transport.sessionId) {
-              delete this.transports[transport.sessionId];
+              this.transports.delete(transport.sessionId);
             }
             throw connectError;
           }
@@ -298,12 +296,12 @@ export class HttpTransport implements Transport {
     this.app.get(basePath, async (req: Request, res: Response) => {
       try {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
-        if (!sessionId || !this.transports[sessionId]) {
+        if (!sessionId || !this.transports.has(sessionId)) {
           res.status(400).send('Invalid or missing session ID');
           return;
         }
 
-        const transport = this.transports[sessionId];
+        const transport = this.transports.get(sessionId)!;
         await transport.handleRequest(req, res);
       } catch (error) {
         console.error('MCP SSE request failed:', error);
@@ -317,20 +315,20 @@ export class HttpTransport implements Transport {
     this.app.delete(basePath, async (req: Request, res: Response) => {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
       try {
-        if (!sessionId || !this.transports[sessionId]) {
+        if (!sessionId || !this.transports.has(sessionId)) {
           res.status(400).send('Invalid or missing session ID');
           return;
         }
 
-        const transport = this.transports[sessionId];
+        const transport = this.transports.get(sessionId)!;
         await transport.handleRequest(req, res);
 
         // Clean up the transport
-        delete this.transports[sessionId];
+        this.transports.delete(sessionId);
 
       } catch (error) {
         if (sessionId) {
-          delete this.transports[sessionId];
+          this.transports.delete(sessionId);
         }
         console.error('MCP DELETE request failed:', error);
         if (!res.headersSent) {
@@ -345,7 +343,7 @@ export class HttpTransport implements Transport {
         status: 'ok',
         transport: 'streamableHttp',
         timestamp: new Date().toISOString(),
-        sessions: Object.keys(this.transports).length
+        sessions: this.transports.size
       });
     });
   }
@@ -433,7 +431,7 @@ export class HttpTransport implements Transport {
    * Get active session count
    */
   getSessionCount(): number {
-    return Object.keys(this.transports).length;
+    return this.transports.size;
   }
 
   /**
