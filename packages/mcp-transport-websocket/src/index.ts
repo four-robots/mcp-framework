@@ -413,7 +413,9 @@ export class WebSocketTransport implements Transport {
 
     // Set up message handling
     connection.onMessage((message) => {
-      this.handleMessage(message, connection);
+      this.handleMessage(message, connection).catch(err => {
+        console.error('Unhandled error in WebSocket message handler:', err);
+      });
     });
 
     // Handle connection state changes

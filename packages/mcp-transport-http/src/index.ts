@@ -396,12 +396,14 @@ export class HttpTransport implements Transport {
 
     return new Promise((resolve, reject) => {
       try {
+        const startupErrorHandler = (error: Error) => reject(error);
+
         this.server = this.app!.listen(
           this.config.port,
           this.config.host!,
           () => {
             // Replace startup error handler with logging-only handler
-            this.server.removeAllListeners('error');
+            this.server.removeListener('error', startupErrorHandler);
             this.server.on('error', (error: Error) => {
               console.error('HTTP server error:', error);
             });
@@ -411,9 +413,7 @@ export class HttpTransport implements Transport {
         );
 
         // Reject on startup errors (e.g. EADDRINUSE)
-        this.server.on('error', (error: Error) => {
-          reject(error);
-        });
+        this.server.on('error', startupErrorHandler);
       } catch (error) {
         reject(error);
       }
