@@ -166,10 +166,15 @@ describe('Rate Limiting System', () => {
       };
       expect(RateLimitUtils.getClientIp(req2)).toBe('192.168.1.2');
 
-      const req3 = { 
+      // x-forwarded-for is intentionally NOT used as fallback (spoofable without proxy config)
+      const req3 = {
         headers: { 'x-forwarded-for': '192.168.1.3, 10.0.0.1' }
       };
-      expect(RateLimitUtils.getClientIp(req3)).toBe('192.168.1.3');
+      expect(RateLimitUtils.getClientIp(req3)).toBe('127.0.0.1');
+
+      // socket.remoteAddress fallback
+      const req5 = { socket: { remoteAddress: '10.0.0.5' } };
+      expect(RateLimitUtils.getClientIp(req5)).toBe('10.0.0.5');
 
       const req4 = {};
       expect(RateLimitUtils.getClientIp(req4)).toBe('127.0.0.1');
