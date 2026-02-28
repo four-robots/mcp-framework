@@ -334,14 +334,17 @@ export class WebSocketTransport implements Transport {
 
     // Start HTTP server
     return new Promise((resolve, reject) => {
+      const startupErrorHandler = (error: Error) => reject(error);
       this.httpServer!.listen(this.config.port, this.config.host, () => {
+        this.httpServer!.removeListener('error', startupErrorHandler);
+        this.httpServer!.on('error', (error: Error) => {
+          console.error('WebSocket HTTP server error:', error);
+        });
         console.log(`WebSocket transport listening on ${this.config.host}:${this.config.port}${this.config.path}`);
         resolve();
       });
 
-      this.httpServer!.on('error', (error) => {
-        reject(error);
-      });
+      this.httpServer!.on('error', startupErrorHandler);
     });
   }
 

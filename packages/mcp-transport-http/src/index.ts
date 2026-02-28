@@ -58,11 +58,11 @@ export class HttpTransport implements Transport {
 
   constructor(config: HttpConfig) {
     this.config = {
+      ...config,
       host: config.host || '0.0.0.0',
       basePath: config.basePath || '/mcp',
       enableDnsRebindingProtection: config.enableDnsRebindingProtection ?? true,
       allowedHosts: config.allowedHosts || ['127.0.0.1', 'localhost'],
-      ...config
     };
 
     if (config.auth) {
