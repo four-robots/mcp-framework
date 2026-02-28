@@ -100,6 +100,10 @@ export class WebSocketConnection {
 
     // Set initial state to connected if WebSocket is already open
     if (this.ws.readyState === WebSocket.OPEN) {
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+        this.connectionTimeout = undefined;
+      }
       this.setState(ConnectionState.Connected);
       this.startHeartbeat();
     }
