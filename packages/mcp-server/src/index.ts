@@ -1147,9 +1147,9 @@ export class MCPServer {
       const decoded = JSON.parse(Buffer.from(cursorString, 'base64').toString());
       const { payload, signature } = decoded;
 
-      // Verify signature using constant-time comparison
-      const expected = Buffer.from(this.createHMAC(payload), 'utf8');
-      const actual = Buffer.from(signature, 'utf8');
+      // Verify signature using constant-time comparison (hex encoding matches createHMAC's digest('hex'))
+      const expected = Buffer.from(this.createHMAC(payload), 'hex');
+      const actual = Buffer.from(signature, 'hex');
       if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
         return null;
       }
