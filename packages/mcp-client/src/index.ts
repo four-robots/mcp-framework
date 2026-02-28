@@ -735,18 +735,22 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
                 code: 'MAX_LENGTH'
               });
             }
-            if (field.validation?.pattern && field.validation.pattern.length <= 200) {
-              try {
-                const regex = new RegExp(field.validation.pattern);
-                if (!regex.test(value)) {
-                  errors.push({
-                    field: field.name,
-                    message: `${field.label} format is invalid`,
-                    code: 'INVALID_PATTERN'
-                  });
+            if (field.validation?.pattern && field.validation.pattern.length <= 100) {
+              // Reject patterns with nested quantifiers to prevent ReDoS
+              const hasNestedQuantifiers = /(\+|\*|\{)\s*\)(\+|\*|\?)|\(\?[^)]*(\+|\*)\)(\+|\*|\?)/.test(field.validation.pattern);
+              if (!hasNestedQuantifiers) {
+                try {
+                  const regex = new RegExp(field.validation.pattern);
+                  if (!regex.test(value)) {
+                    errors.push({
+                      field: field.name,
+                      message: `${field.label} format is invalid`,
+                      code: 'INVALID_PATTERN'
+                    });
+                  }
+                } catch {
+                  // Invalid regex pattern from server, skip validation
                 }
-              } catch {
-                // Invalid regex pattern from server, skip validation
               }
             }
           }

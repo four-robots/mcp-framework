@@ -1,7 +1,8 @@
 import express, { Request, Response, Application, Router, RequestHandler } from 'express';
 import cors, { CorsOptions } from 'cors';
-import helmet from 'helmet';
+import helmet, { type HelmetOptions } from 'helmet';
 import { randomUUID } from 'crypto';
+import http from 'http';
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport, MCPServer, MCPErrorFactory, MCPErrorCode, formatMCPError } from "@tylercoles/mcp-server";
 import type { AuthProvider, User, OAuthProvider } from "@tylercoles/mcp-auth";
@@ -36,7 +37,7 @@ export interface HttpConfig {
   sessionConfig?: SessionConfig;
   enableDnsRebindingProtection?: boolean;
   allowedHosts?: string[];
-  helmetOptions?: any;
+  helmetOptions?: HelmetOptions | false;
   trustProxy?: boolean;
   basePath?: string; // Base path for MCP endpoints (default: '/mcp')
   externalDomain?: string; // External domain for OAuth callbacks
@@ -50,7 +51,7 @@ export interface HttpConfig {
 export class HttpTransport implements Transport {
   private config: HttpConfig;
   private app: Application | null = null;
-  private server: any = null;
+  private server: http.Server | null = null;
   private mcpServer: MCPServer | null = null;
   private transports: Map<string, StreamableHTTPServerTransport> = new Map();
   private authProvider: AuthProvider | null = null;
@@ -127,7 +128,7 @@ export class HttpTransport implements Transport {
           resolve();
         }, 5000);
         timeout.unref();
-        this.server.close(() => {
+        this.server!.close(() => {
           clearTimeout(timeout);
           resolve();
         });
@@ -403,8 +404,8 @@ export class HttpTransport implements Transport {
           this.config.host!,
           () => {
             // Replace startup error handler with logging-only handler
-            this.server.removeListener('error', startupErrorHandler);
-            this.server.on('error', (error: Error) => {
+            this.server!.removeListener('error', startupErrorHandler);
+            this.server!.on('error', (error: Error) => {
               console.error('HTTP server error:', error);
             });
             console.log(`MCP HTTP transport listening on ${this.config.host}:${this.config.port}`);
@@ -413,7 +414,7 @@ export class HttpTransport implements Transport {
         );
 
         // Reject on startup errors (e.g. EADDRINUSE)
-        this.server.on('error', startupErrorHandler);
+        this.server!.on('error', startupErrorHandler);
       } catch (error) {
         reject(error);
       }
