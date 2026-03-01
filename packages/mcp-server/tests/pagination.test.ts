@@ -279,15 +279,23 @@ describe('MCP Pagination System', () => {
     it('should validate limit parameter', () => {
       expect(() => {
         server.getToolsPaginated({ limit: 0 });
-      }).toThrow('Limit must be a positive number');
+      }).toThrow('Limit must be a positive integer');
 
       expect(() => {
         server.getToolsPaginated({ limit: -5 });
-      }).toThrow('Limit must be a positive number');
+      }).toThrow('Limit must be a positive integer');
 
       expect(() => {
         server.getToolsPaginated({ limit: 101 }); // Exceeds max of 100
       }).toThrow('Limit cannot exceed 100');
+
+      expect(() => {
+        server.getToolsPaginated({ limit: 0.5 });
+      }).toThrow('Limit must be a positive integer');
+
+      expect(() => {
+        server.getToolsPaginated({ limit: 2.7 });
+      }).toThrow('Limit must be a positive integer');
     });
 
     it('should validate cursor parameter', () => {
