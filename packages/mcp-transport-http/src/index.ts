@@ -261,6 +261,11 @@ export class HttpTransport implements Transport {
             if (transport.sessionId) {
               this.transports.delete(transport.sessionId);
             }
+            try {
+              await transport.close?.();
+            } catch {
+              // Ignore cleanup errors
+            }
             throw connectError;
           }
         }
@@ -414,7 +419,7 @@ export class HttpTransport implements Transport {
         );
 
         // Reject on startup errors (e.g. EADDRINUSE)
-        this.server!.on('error', startupErrorHandler);
+        this.server!.once('error', startupErrorHandler);
       } catch (error) {
         reject(error);
       }

@@ -1,5 +1,6 @@
-import { 
-  CallToolResult, 
+import { randomBytes } from 'crypto';
+import {
+  CallToolResult,
   GetPromptResult,
   ReadResourceResult,
   JSONRPCMessage,
@@ -477,14 +478,14 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
    * Generate unique request ID
    */
   protected generateRequestId(): string {
-    return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `req_${Date.now()}_${randomBytes(6).toString('hex')}`;
   }
 
   /**
    * Generate unique session ID
    */
   protected generateSessionId(): string {
-    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `session_${Date.now()}_${randomBytes(6).toString('hex')}`;
   }
 
   /**
