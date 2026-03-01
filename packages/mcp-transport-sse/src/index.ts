@@ -123,6 +123,7 @@ export class SSETransport implements Transport {
           transport.close().catch((err) => {
             console.error(`Error closing SSE transport ${sessionId} on backpressure:`, err);
           });
+          res.end();
           return;
         }
 

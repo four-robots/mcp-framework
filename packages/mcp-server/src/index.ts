@@ -2547,7 +2547,7 @@ export class MCPServer {
     argument: { name: string; value: string }
   ): Promise<CompletionResult> {
     const request: CompletionRequest = { ref, argument };
-    return this.handleCompletion(request);
+    return this.handleCompletion(request, this.config.propagateErrors ?? false);
   }
 
   /**

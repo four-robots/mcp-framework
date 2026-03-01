@@ -95,6 +95,11 @@ class MockElicitationClient extends BaseMCPClient {
   public handleElicitationNotificationPublic(notification: any) {
     return this.handleElicitationNotification(notification);
   }
+
+  // Expose cleanup for testing handler persistence
+  public cleanupPublic() {
+    this.cleanup();
+  }
 }
 
 describe('MCP Elicitation System', () => {
@@ -137,16 +142,50 @@ describe('MCP Elicitation System', () => {
     it('should support multiple elicitation handlers', () => {
       const handler1: ElicitationHandler = vi.fn();
       const handler2: ElicitationHandler = vi.fn();
-      
+
       const unregister1 = client.registerElicitationHandler(handler1);
       const unregister2 = client.registerElicitationHandler(handler2);
-      
+
       expect(typeof unregister1).toBe('function');
       expect(typeof unregister2).toBe('function');
-      
+
       // Unregister handlers
       unregister1();
       unregister2();
+    });
+
+    it('should preserve handlers after cleanup (disconnect/reconnect)', async () => {
+      const handler: ElicitationHandler = vi.fn().mockResolvedValue({
+        id: 'persist-test',
+        action: ElicitationAction.Accept,
+        values: { name: 'Persistent' }
+      });
+
+      const stateHandler = vi.fn();
+      const messageHandler = vi.fn();
+
+      client.registerElicitationHandler(handler);
+      client.subscribeToConnectionState(stateHandler);
+      client.subscribeToMessages(messageHandler);
+
+      // Simulate cleanup (called during disconnect in concrete clients)
+      client.cleanupPublic();
+
+      // Elicitation handlers should still work after cleanup
+      const request: ElicitationRequest = {
+        id: 'persist-test',
+        title: 'Test',
+        fields: [{ name: 'name', type: 'text', label: 'Name' }]
+      };
+
+      const response = await client.handleElicitationRequest(request);
+      expect(response.action).toBe(ElicitationAction.Accept);
+      expect(response.values?.name).toBe('Persistent');
+      expect(handler).toHaveBeenCalled();
+
+      // State change callbacks should still fire after cleanup
+      client.setConnectionStatePublic(ConnectionState.Connected);
+      expect(stateHandler).toHaveBeenCalledWith(ConnectionState.Connected, undefined);
     });
   });
 
