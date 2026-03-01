@@ -303,7 +303,7 @@ describe('WebSocketConnection', () => {
 
     it('should send error responses', async () => {
       await connection.sendError(-32602, 'Invalid params', '1');
-      
+
       expect(mockWs.send).toHaveBeenCalledWith(
         JSON.stringify({
           jsonrpc: '2.0',
@@ -311,6 +311,22 @@ describe('WebSocketConnection', () => {
           error: {
             code: -32602,
             message: 'Invalid params'
+          }
+        }),
+        expect.any(Function)
+      );
+    });
+
+    it('should send error with null id when id is not provided', async () => {
+      await connection.sendError(-32700, 'Parse error');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: null,
+          error: {
+            code: -32700,
+            message: 'Parse error'
           }
         }),
         expect.any(Function)

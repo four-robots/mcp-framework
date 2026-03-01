@@ -219,6 +219,32 @@ describe('OAuth Provider - High-Level Convenience Methods', () => {
     });
   });
 
+  describe('PKCE Store Eviction', () => {
+    it('should evict oldest entries when store reaches capacity', async () => {
+      const redirectUri = 'http://localhost:3000/callback';
+
+      // Fill the PKCE store beyond capacity (PKCE_MAX_SIZE = 1000)
+      // We access the private static to know the cap
+      const maxSize = (OAuthProvider as any).PKCE_MAX_SIZE || 1000;
+      for (let i = 0; i < maxSize; i++) {
+        await provider.startOAuthFlow(`state-${i}`, redirectUri);
+      }
+
+      // Add one more — should trigger eviction of ~10% oldest entries
+      await provider.startOAuthFlow('state-overflow', redirectUri);
+
+      // The overflow entry should still be usable
+      await expect(
+        provider.completeOAuthFlow('valid-code', 'state-overflow', redirectUri)
+      ).resolves.toBeDefined();
+
+      // The very first entry should have been evicted
+      await expect(
+        provider.completeOAuthFlow('valid-code', 'state-0', redirectUri)
+      ).rejects.toThrow('PKCE parameters not found for state');
+    });
+  });
+
   describe('Integration with existing methods', () => {
     it('should work alongside manual PKCE parameter management', async () => {
       // Generate PKCE parameters manually

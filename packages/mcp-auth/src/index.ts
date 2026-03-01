@@ -292,12 +292,12 @@ export abstract class OAuthProvider extends AuthProvider {
         this.pkceStore.delete(key);
       }
     }
-    // Hard cap to prevent abuse
+    // Hard cap to prevent abuse — evict oldest 10% when at capacity
     if (this.pkceStore.size >= OAuthProvider.PKCE_MAX_SIZE) {
-      // Remove oldest entries
       const entries = Array.from(this.pkceStore.entries())
         .sort((a, b) => a[1].createdAt - b[1].createdAt);
-      const toRemove = entries.slice(0, entries.length - OAuthProvider.PKCE_MAX_SIZE + 1);
+      const evictCount = Math.max(1, Math.ceil(OAuthProvider.PKCE_MAX_SIZE * 0.1));
+      const toRemove = entries.slice(0, evictCount);
       for (const [key] of toRemove) {
         this.pkceStore.delete(key);
       }

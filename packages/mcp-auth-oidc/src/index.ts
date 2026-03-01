@@ -582,7 +582,7 @@ export class OIDCProvider extends OAuthProvider {
     }
 
     if (!key) {
-      throw new Error(`Signing key not found for kid: ${kid}`);
+      throw new Error('Signing key not found for the requested key ID');
     }
 
     // Convert JWK to PEM using Node.js crypto
@@ -1020,6 +1020,10 @@ export class OIDCProvider extends OAuthProvider {
 
     // Logout route
     router.post(`${prefix}/logout`, (req, res) => {
+      // Always clear the session cookie regardless of error paths
+      // to prevent session replay if logout/destroy fails
+      res.clearCookie('connect.sid');
+
       (req as any).logout((err: any) => {
         if (err) {
           res.status(500).json(createOAuthError('server_error', 'Logout failed'));
@@ -1033,8 +1037,6 @@ export class OIDCProvider extends OAuthProvider {
               res.status(500).json(createOAuthError('server_error', 'Failed to destroy session'));
               return;
             }
-            // Clear the session cookie so the browser doesn't send a stale session ID
-            res.clearCookie('connect.sid');
             res.json({ success: true });
           });
         } else {

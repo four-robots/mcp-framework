@@ -355,7 +355,9 @@ export class HttpRateLimitMiddleware {
                              (skipFailedRequests && statusCode >= 400);
 
             if (shouldSkip) {
-              store.decrement(key).catch(() => {});
+              store.decrement(key).catch(err => {
+                console.warn('Rate limit decrement failed:', err);
+              });
             }
           });
         }

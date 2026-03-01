@@ -294,6 +294,23 @@ describe('MCP Elicitation System', () => {
       expect(workingHandler).toHaveBeenCalled();
     });
 
+    it('should cancel Accept response that has no values', async () => {
+      const noValuesClient = new MockElicitationClient(config);
+
+      const handler: ElicitationHandler = vi.fn().mockResolvedValue({
+        id: testRequest.id,
+        action: ElicitationAction.Accept,
+        // Missing values field
+      });
+
+      noValuesClient.registerElicitationHandler(handler);
+
+      const response = await noValuesClient.handleElicitationRequest(testRequest);
+
+      expect(response.action).toBe(ElicitationAction.Cancel);
+      expect(response.reason).toBe('Accept action requires values');
+    });
+
     it('should return cancel when no handlers succeed', async () => {
       // Create a new client to avoid interference from beforeEach handler
       const failClient = new MockElicitationClient(config);
