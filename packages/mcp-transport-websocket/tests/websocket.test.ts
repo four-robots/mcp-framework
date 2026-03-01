@@ -145,7 +145,6 @@ describe('WebSocketConnection', () => {
       maxConnections: 100,
       heartbeatInterval: 1000,
       connectionTimeout: 2000,
-      messageTimeout: 5000,
       maxMessageSize: 1024 * 1024,
       enableCompression: true,
       enablePerMessageDeflate: true

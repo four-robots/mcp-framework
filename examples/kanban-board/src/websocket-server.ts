@@ -275,19 +275,25 @@ export class KanbanWebSocketServer {
 
   private async handleAddCardTag(payload: any): Promise<any> {
     const { card_id, tag_id } = payload;
+    const card = await this.db.getCardById(card_id);
+    if (!card) throw new Error(`Card not found: ${card_id}`);
     await this.db.addCardTag(card_id, tag_id);
-    return { card_id, tag_id };
+    return { card_id, tag_id, board_id: card.board_id };
   }
 
   private async handleRemoveCardTag(payload: any): Promise<any> {
     const { card_id, tag_id } = payload;
+    const card = await this.db.getCardById(card_id);
+    if (!card) throw new Error(`Card not found: ${card_id}`);
     await this.db.removeCardTag(card_id, tag_id);
-    return { card_id, tag_id };
+    return { card_id, tag_id, board_id: card.board_id };
   }
 
   // Comment operations
   private async handleAddComment(payload: any): Promise<any> {
-    return await this.db.addComment(payload);
+    const comment = await this.db.addComment(payload);
+    const card = await this.db.getCardById(payload.card_id);
+    return { ...comment, board_id: card?.board_id };
   }
 
   private async handleGetComments(payload: any): Promise<any> {

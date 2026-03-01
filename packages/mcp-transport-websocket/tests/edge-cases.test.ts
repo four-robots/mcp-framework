@@ -47,7 +47,6 @@ describe('WebSocketConnection Edge Cases', () => {
       maxConnections: 100,
       heartbeatInterval: 0, // Disable for tests
       connectionTimeout: 2000,
-      messageTimeout: 5000,
       maxMessageSize: 1024 * 1024,
     };
   });

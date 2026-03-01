@@ -515,6 +515,29 @@ describe('MCP Sampling System', () => {
       );
     });
 
+    it('should reject user role in sampling response', async () => {
+      const invalidHandler: SamplingHandler = vi.fn().mockResolvedValue({
+        model: 'test-model',
+        role: 'user', // Invalid: sampling responses must be from 'assistant'
+        content: { type: 'text', text: 'Response' }
+      });
+
+      server.registerSampling({ createMessage: invalidHandler });
+
+      const request: SamplingRequest = {
+        messages: [{
+          role: 'user',
+          content: { type: 'text', text: 'Hello' }
+        }]
+      };
+
+      await expect(server.createSamplingMessage(request)).rejects.toThrow(
+        expect.objectContaining({
+          message: expect.stringContaining('Sampling response role must be assistant')
+        })
+      );
+    });
+
     it('should validate response content format', async () => {
       const invalidHandler: SamplingHandler = vi.fn().mockResolvedValue({
         model: 'test-model',
