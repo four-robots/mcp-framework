@@ -100,6 +100,11 @@ class MockElicitationClient extends BaseMCPClient {
   public cleanupPublic() {
     this.cleanup();
   }
+
+  // Expose notifyProgress for testing progress callback persistence
+  public notifyProgressPublic(progress: any) {
+    this.notifyProgress(progress);
+  }
 }
 
 describe('MCP Elicitation System', () => {
@@ -162,11 +167,11 @@ describe('MCP Elicitation System', () => {
       });
 
       const stateHandler = vi.fn();
-      const messageHandler = vi.fn();
+      const progressHandler = vi.fn();
 
       client.registerElicitationHandler(handler);
       client.subscribeToConnectionState(stateHandler);
-      client.subscribeToMessages(messageHandler);
+      client.subscribeToProgress(progressHandler);
 
       // Simulate cleanup (called during disconnect in concrete clients)
       client.cleanupPublic();
@@ -186,6 +191,11 @@ describe('MCP Elicitation System', () => {
       // State change callbacks should still fire after cleanup
       client.setConnectionStatePublic(ConnectionState.Connected);
       expect(stateHandler).toHaveBeenCalledWith(ConnectionState.Connected, undefined);
+
+      // Progress callbacks should still fire after cleanup
+      const progress = { progressToken: 'tok', progress: 50, total: 100 };
+      client.notifyProgressPublic(progress);
+      expect(progressHandler).toHaveBeenCalledWith(progress);
     });
   });
 

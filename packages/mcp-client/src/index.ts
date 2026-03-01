@@ -838,11 +838,10 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
       this.reconnectTimer = undefined;
     }
     // Only clear transient per-connection state, NOT user-registered handlers
-    // (elicitationHandlers, connectionStateCallbacks, messageCallbacks)
-    // which should persist across reconnections
+    // (elicitationHandlers, connectionStateCallbacks, messageCallbacks,
+    // progressCallbacks) which should persist across reconnections
     this.activeRequests.clear();
     this.activeElicitationRequests.clear();
-    this.progressCallbacks.clear();
   }
 }
 
