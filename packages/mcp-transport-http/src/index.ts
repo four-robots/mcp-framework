@@ -10,16 +10,6 @@ import { createOAuthDiscoveryRoutes } from "@tylercoles/mcp-auth";
 import { HttpRateLimitMiddleware, type HttpRateLimitConfig } from "@tylercoles/mcp-rate-limit";
 
 /**
- * Session configuration
- */
-export interface SessionConfig {
-  secret?: string;
-  maxAge?: number;
-  secure?: boolean;
-  sameSite?: 'strict' | 'lax' | 'none';
-}
-
-/**
  * CORS configuration
  */
 export interface CorsConfig extends CorsOptions {
@@ -34,7 +24,8 @@ export interface HttpConfig {
   port: number;
   cors?: CorsConfig;
   auth?: AuthProvider;
-  sessionConfig?: SessionConfig;
+  /** @deprecated Session configuration is not implemented - use auth providers for session management */
+  sessionConfig?: Record<string, unknown>;
   enableDnsRebindingProtection?: boolean;
   allowedHosts?: string[];
   helmetOptions?: HelmetOptions | false;
@@ -303,7 +294,7 @@ export class HttpTransport implements Transport {
       try {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         if (!sessionId || !this.transports.has(sessionId)) {
-          res.status(400).send('Invalid or missing session ID');
+          res.status(400).json({ error: 'Invalid or missing session ID' });
           return;
         }
 
@@ -312,7 +303,7 @@ export class HttpTransport implements Transport {
       } catch (error) {
         console.error('MCP SSE request failed:', error);
         if (!res.headersSent) {
-          res.status(500).send('Internal server error');
+          res.status(500).json({ error: 'Internal server error' });
         }
       }
     });
@@ -322,7 +313,7 @@ export class HttpTransport implements Transport {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
       try {
         if (!sessionId || !this.transports.has(sessionId)) {
-          res.status(400).send('Invalid or missing session ID');
+          res.status(400).json({ error: 'Invalid or missing session ID' });
           return;
         }
 
@@ -338,7 +329,7 @@ export class HttpTransport implements Transport {
         }
         console.error('MCP DELETE request failed:', error);
         if (!res.headersSent) {
-          res.status(500).send('Internal server error');
+          res.status(500).json({ error: 'Internal server error' });
         }
       }
     });

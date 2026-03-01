@@ -176,26 +176,53 @@ describe('HttpTransport Edge Cases', () => {
       expect(app.get('trust proxy')).toBe(1);
     });
 
-    it('should handle custom session config', async () => {
+    it('should return JSON error responses for GET without session', async () => {
+      transport = new HttpTransport({ port: 0 });
+      await transport.start(server);
+
+      const app = transport.getApp()!;
+
+      // Simulate GET request without session header
+      const { default: supertest } = await import('supertest');
+      const response = await supertest(app)
+        .get('/mcp')
+        .set('Accept', 'application/json');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toBe('Invalid or missing session ID');
+    });
+
+    it('should return JSON error responses for DELETE without session', async () => {
+      transport = new HttpTransport({ port: 0 });
+      await transport.start(server);
+
+      const app = transport.getApp()!;
+
+      const { default: supertest } = await import('supertest');
+      const response = await supertest(app)
+        .delete('/mcp')
+        .set('Accept', 'application/json');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toBe('Invalid or missing session ID');
+    });
+
+    it('should accept deprecated sessionConfig without errors', async () => {
       const config: HttpConfig = {
         port: 0,
         sessionConfig: {
           secret: 'test-secret',
           maxAge: 3600000,
-          secure: true,
-          sameSite: 'strict'
         }
       };
 
       transport = new HttpTransport(config);
       await transport.start(server);
 
-      expect((transport as any).config.sessionConfig).toEqual({
-        secret: 'test-secret',
-        maxAge: 3600000,
-        secure: true,
-        sameSite: 'strict'
-      });
+      // sessionConfig is accepted but not used (deprecated)
+      expect((transport as any).config.sessionConfig).toBeDefined();
     });
   });
 });
