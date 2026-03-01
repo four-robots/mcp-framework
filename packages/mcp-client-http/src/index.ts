@@ -40,7 +40,8 @@ export class HttpMCPClient extends BaseMCPClient {
     super(config);
     this.httpConfig = config;
     this.transport = new StreamableHTTPClientTransport(
-      new URL(config.url)
+      new URL(config.url),
+      config.headers ? { requestInit: { headers: config.headers } } : undefined
     );
     this.client = new Client({
       name: "http-mcp-client",
@@ -61,7 +62,8 @@ export class HttpMCPClient extends BaseMCPClient {
 
     if (this.needsFreshTransport) {
       this.transport = new StreamableHTTPClientTransport(
-        new URL(this.httpConfig.url)
+        new URL(this.httpConfig.url),
+        this.httpConfig.headers ? { requestInit: { headers: this.httpConfig.headers } } : undefined
       );
       this.client = new Client({
         name: "http-mcp-client",

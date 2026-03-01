@@ -109,16 +109,25 @@ async function main() {
   console.log(`[Echo Server] HTTP server started on http://127.0.0.1:${PORT}`);
   console.log(`[Echo Server] MCP endpoint: http://127.0.0.1:${PORT}/mcp`);
   console.log(`[Echo Server] Using development auth (all requests authenticated as test-user)`);
+
+  return server;
 }
 
-// Handle shutdown gracefully
-process.on('SIGINT', () => {
-  console.log('\n[Echo Server] Shutting down...');
-  process.exit(0);
-});
-
 // Run the server
-main().catch((error) => {
+let serverInstance: MCPServer | undefined;
+
+main().then((server) => {
+  serverInstance = server;
+}).catch((error) => {
   console.error('[Echo Server] Fatal error:', error);
   process.exit(1);
+});
+
+// Handle shutdown gracefully
+process.on('SIGINT', async () => {
+  console.log('\n[Echo Server] Shutting down...');
+  if (serverInstance) {
+    await serverInstance.stop();
+  }
+  process.exit(0);
 });

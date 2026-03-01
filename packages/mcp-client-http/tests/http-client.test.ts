@@ -35,13 +35,39 @@ describe('HttpMCPClient', () => {
       url: 'http://localhost:3000',
       headers: { 'Authorization': 'Bearer test' }
     });
-    
+
     // Get the mock client instance
     mockSDKClient = (Client as any).mock.results[0].value;
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('constructor', () => {
+    it('should pass headers to StreamableHTTPClientTransport', () => {
+      const headers = { 'Authorization': 'Bearer my-token', 'X-Custom': 'value' };
+      const _client = new HttpMCPClient({
+        url: 'http://localhost:4000',
+        headers
+      });
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        { requestInit: { headers } }
+      );
+    });
+
+    it('should not pass requestInit when no headers configured', () => {
+      const _client = new HttpMCPClient({
+        url: 'http://localhost:4000'
+      });
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        undefined
+      );
+    });
   });
 
   describe('sendMessage', () => {
