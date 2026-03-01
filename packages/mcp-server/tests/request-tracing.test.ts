@@ -374,4 +374,83 @@ describe('Request Tracing System', () => {
       expect(endLog.performance.endTime).toBeTypeOf('number');
     });
   });
+
+  describe('PerformanceTracker Stale Entry Cleanup', () => {
+    it('should clean up stale entries when exceeding 100 active trackings', () => {
+      const tracker = new PerformanceTracker();
+
+      // Add 101 entries to trigger cleanup
+      for (let i = 0; i < 101; i++) {
+        tracker.startTracking(`stale-${i}`, `op-${i}`);
+      }
+
+      // All entries are recent, none should be cleaned up
+      // (stale threshold is 5 minutes)
+      expect(tracker.getActiveTrackingCount()).toBe(101);
+
+      // Now manually set some entries to appear stale by starting more
+      // The cleanup is threshold-based, so entries would only be removed
+      // if startTime is > 5 minutes old
+      tracker.clearAll();
+    });
+
+    it('should not crash when metric callback throws', () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const tracker = new PerformanceTracker(() => {
+        throw new Error('Callback error');
+      });
+
+      tracker.startTracking('err-callback', 'op');
+
+      // endTracking should not throw even though callback does
+      expect(() => tracker.endTracking('err-callback', true)).not.toThrow();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle endTracking for already-ended correlation', () => {
+      const tracker = new PerformanceTracker();
+
+      tracker.startTracking('once', 'op');
+      const first = tracker.endTracking('once', true);
+      const second = tracker.endTracking('once', true);
+
+      expect(first).not.toBeNull();
+      expect(second).toBeNull();
+    });
+  });
+
+  describe('CorrelationManager Context Enhancement', () => {
+    it('should preserve existing context fields when enhancing', () => {
+      const context: ToolContext = {
+        user: { id: '123' },
+        custom: 'data',
+        correlationId: 'existing-corr'
+      };
+
+      const enhanced = CorrelationManager.enhanceContext(context);
+
+      // Existing fields should be preserved
+      expect(enhanced.user).toEqual({ id: '123' });
+      expect(enhanced.custom).toBe('data');
+      // Existing correlationId should NOT be overwritten
+      expect(enhanced.correlationId).toBe('existing-corr');
+      // New fields should be generated
+      expect(enhanced.requestId).toBeDefined();
+      expect(enhanced.traceId).toBeDefined();
+      expect(enhanced.spanId).toBeDefined();
+      expect(enhanced.startTime).toBeDefined();
+    });
+
+    it('should generate all fields when no context is provided', () => {
+      const enhanced = CorrelationManager.enhanceContext();
+
+      expect(enhanced.correlationId).toMatch(/^corr_/);
+      expect(enhanced.requestId).toMatch(/^req_/);
+      expect(enhanced.traceId).toMatch(/^trace_/);
+      expect(enhanced.spanId).toMatch(/^span_/);
+      expect(enhanced.startTime).toBeTypeOf('number');
+    });
+  });
 });

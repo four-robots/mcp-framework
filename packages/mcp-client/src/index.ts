@@ -536,12 +536,16 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
 
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = undefined;
+      // Abort if user explicitly disconnected while the timer was pending
+      if (this.intentionalDisconnect) return;
       try {
         this.stats.reconnectCount++;
         await this.connect();
         // Reset reconnect count on successful reconnect
         this.stats.reconnectCount = 0;
       } catch (error) {
+        // Don't reschedule if disconnect was called during the connect attempt
+        if (this.intentionalDisconnect) return;
         console.error('Reconnection failed:', error);
         if (this.stats.reconnectCount < this.config.maxRetries) {
           this.scheduleReconnect();

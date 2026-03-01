@@ -326,7 +326,7 @@ describe('Session Management System', () => {
     });
 
     it('should handle custom cleanup intervals', async () => {
-      const config: SessionConfig = { 
+      const config: SessionConfig = {
         enabled: true,
         timeoutMs: 10,
         cleanupIntervalMs: 20
@@ -341,6 +341,92 @@ describe('Session Management System', () => {
 
       const stats = sessionManager.getSessionStats();
       expect(stats.activeSessions).toBe(0);
+    });
+
+    it('should effectively disable sessions when maxSessions is 0', () => {
+      const config: SessionConfig = {
+        enabled: true,
+        maxSessions: 0
+      };
+      sessionManager = new SessionManager(config);
+
+      // Attempting to store any session should fail because maxSessions=0
+      // means sessions.size (0) >= maxSessions (0) is true, and eviction
+      // of an empty map returns false
+      const stored = sessionManager.storeSession({ sessionId: 'zero-max-test' });
+      expect(stored).toBe(false);
+
+      const stats = sessionManager.getSessionStats();
+      expect(stats.totalSessions).toBe(0);
+    });
+
+    it('should allow updating an existing session even when at maxSessions', () => {
+      const config: SessionConfig = {
+        enabled: true,
+        maxSessions: 1
+      };
+      sessionManager = new SessionManager(config);
+
+      // Store initial session
+      sessionManager.storeSession({ sessionId: 'existing-session', data: 'v1' });
+      expect(sessionManager.getSessionStats().totalSessions).toBe(1);
+
+      // Update same session should succeed (existing entry, no eviction needed)
+      const updated = sessionManager.storeSession({ sessionId: 'existing-session', data: 'v2' });
+      expect(updated).toBe(true);
+      expect(sessionManager.getSessionStats().totalSessions).toBe(1);
+    });
+
+    it('should return null for key generator that returns null', () => {
+      const config: SessionConfig = {
+        enabled: true,
+        keyGenerator: () => null
+      };
+      sessionManager = new SessionManager(config);
+
+      const stored = sessionManager.storeSession({ sessionId: 'null-key' });
+      expect(stored).toBe(false);
+
+      const retrieved = sessionManager.retrieveSession({ sessionId: 'null-key' });
+      expect(retrieved).toBeNull();
+    });
+
+    it('should evict oldest session by lastAccessedAt not createdAt', async () => {
+      const config: SessionConfig = {
+        enabled: true,
+        maxSessions: 2
+      };
+      sessionManager = new SessionManager(config);
+
+      // Store two sessions with sufficient delay so lastAccessedAt differs
+      sessionManager.storeSession({ sessionId: 'older' });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      sessionManager.storeSession({ sessionId: 'newer' });
+
+      // Wait a bit, then access 'older' so its lastAccessedAt becomes more recent
+      await new Promise(resolve => setTimeout(resolve, 20));
+      sessionManager.retrieveSession({ sessionId: 'older' });
+
+      // Store a third session — should evict 'newer' (least recently accessed)
+      sessionManager.storeSession({ sessionId: 'third' });
+
+      expect(sessionManager.retrieveSession({ sessionId: 'older' })).not.toBeNull();
+      expect(sessionManager.retrieveSession({ sessionId: 'newer' })).toBeNull();
+      expect(sessionManager.retrieveSession({ sessionId: 'third' })).not.toBeNull();
+    });
+
+    it('should stop cleanup timer on stop()', () => {
+      const config: SessionConfig = {
+        enabled: true,
+        cleanupIntervalMs: 100
+      };
+      sessionManager = new SessionManager(config);
+
+      // Calling stop should clear the timer
+      sessionManager.stop();
+
+      // Double-stop should not throw
+      expect(() => sessionManager.stop()).not.toThrow();
     });
   });
 });

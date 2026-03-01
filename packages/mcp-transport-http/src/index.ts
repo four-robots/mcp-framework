@@ -324,8 +324,16 @@ export class HttpTransport implements Transport {
         this.transports.delete(sessionId);
 
       } catch (error) {
+        // Clean up the transport on error — remove from map and close it
+        // so it doesn't leak resources
         if (sessionId && this.transports.has(sessionId)) {
+          const failedTransport = this.transports.get(sessionId)!;
           this.transports.delete(sessionId);
+          try {
+            await failedTransport.close?.();
+          } catch {
+            // Ignore cleanup errors
+          }
         }
         console.error('MCP DELETE request failed:', error);
         if (!res.headersSent) {

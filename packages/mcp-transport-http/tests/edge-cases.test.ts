@@ -225,4 +225,67 @@ describe('HttpTransport Edge Cases', () => {
       expect((transport as any).config.sessionConfig).toBeDefined();
     });
   });
+
+  describe('DELETE handler transport cleanup', () => {
+    it('should close transport when DELETE handler throws', async () => {
+      transport = new HttpTransport({ port: 0 });
+      await transport.start(server);
+
+      const app = transport.getApp()!;
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Manually add a mock transport that throws on handleRequest
+      const mockClose = vi.fn().mockResolvedValue(undefined);
+      const failingTransport = {
+        sessionId: 'fail-session',
+        handleRequest: vi.fn().mockRejectedValue(new Error('DELETE failed')),
+        close: mockClose,
+        onclose: null,
+      };
+      (transport as any).transports.set('fail-session', failingTransport);
+
+      const { default: supertest } = await import('supertest');
+      const response = await supertest(app)
+        .delete('/mcp')
+        .set('mcp-session-id', 'fail-session')
+        .set('Accept', 'application/json');
+
+      expect(response.status).toBe(500);
+      // Transport should be removed from the map
+      expect((transport as any).transports.has('fail-session')).toBe(false);
+      // Transport close should be called to release resources
+      expect(mockClose).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle transport close failure in DELETE gracefully', async () => {
+      transport = new HttpTransport({ port: 0 });
+      await transport.start(server);
+
+      const app = transport.getApp()!;
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Transport that throws on both handleRequest and close
+      const failingTransport = {
+        sessionId: 'double-fail',
+        handleRequest: vi.fn().mockRejectedValue(new Error('DELETE failed')),
+        close: vi.fn().mockRejectedValue(new Error('Close also failed')),
+        onclose: null,
+      };
+      (transport as any).transports.set('double-fail', failingTransport);
+
+      const { default: supertest } = await import('supertest');
+      const response = await supertest(app)
+        .delete('/mcp')
+        .set('mcp-session-id', 'double-fail')
+        .set('Accept', 'application/json');
+
+      // Should still return error response, not crash
+      expect(response.status).toBe(500);
+      expect((transport as any).transports.has('double-fail')).toBe(false);
+
+      consoleSpy.mockRestore();
+    });
+  });
 });
