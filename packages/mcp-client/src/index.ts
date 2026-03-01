@@ -548,7 +548,7 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
         }
       }
     }, delay);
-    this.reconnectTimer.unref();
+    this.reconnectTimer?.unref();
   }
 
   /**
