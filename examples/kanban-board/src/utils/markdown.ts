@@ -10,7 +10,9 @@ marked.setOptions({
 const renderer = new marked.Renderer();
 renderer.link = function({ href, title, tokens }) {
   const text = this.parser.parseInline(tokens);
-  return `<a href="${href}" title="${title || ''}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  // Only allow safe URL protocols
+  const safeHref = /^(https?:\/\/|mailto:|#)/.test(href || '') ? href : '#';
+  return `<a href="${safeHref}" title="${title || ''}" target="_blank" rel="noopener noreferrer">${text}</a>`;
 };
 
 marked.use({ renderer });
@@ -29,9 +31,21 @@ export function markdownToHtml(markdown: string): string {
     return marked(markdown) as string;
   } catch (error) {
     console.error('Error parsing markdown:', error);
-    // Return the original text if markdown parsing fails
-    return markdown;
+    // Return escaped text if markdown parsing fails to prevent XSS
+    return escapeHtml(markdown);
   }
+}
+
+/**
+ * Escape HTML special characters
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 /**
@@ -59,7 +73,13 @@ export function markdownToText(markdown: string): string {
  * This is a basic implementation - for production use, consider using a library like DOMPurify
  */
 export function sanitizeMarkdown(html: string): string {
-  // For now, just return the HTML as-is since marked is generally safe
-  // In a production environment, you'd want to use DOMPurify or similar
-  return html;
+  // Strip dangerous tags (script, style, iframe, object, embed, form)
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/<iframe\b[^>]*>.*?<\/iframe>/gi, '')
+    .replace(/<object\b[^>]*>.*?<\/object>/gi, '')
+    .replace(/<embed\b[^>]*\/?>/gi, '')
+    .replace(/<form\b[^>]*>.*?<\/form>/gi, '')
+    .replace(/\bon\w+\s*=\s*(['"]?).*?\1/gi, '');
 }
