@@ -171,7 +171,7 @@ describe('OIDCProvider', () => {
     it('should validate HTTPS endpoints in production', async () => {
       const originalEnv = process.env.NODE_ENV;
       process.env.NODE_ENV = 'production';
-      
+
       const httpProvider = new OIDCProvider({
         clientId: 'test',
         issuer: 'http://insecure.example.com',
@@ -179,11 +179,25 @@ describe('OIDCProvider', () => {
         tokenEndpoint: 'http://insecure.example.com/token',
         jwksUri: 'http://insecure.example.com/jwks',
       });
-      
+
       await expect(httpProvider.getAuthUrl())
         .rejects.toThrow('Authorization endpoint must use HTTPS');
-      
+
       process.env.NODE_ENV = originalEnv;
+    });
+
+    it('should throw when redirect_uri is missing from both parameter and config', async () => {
+      const noRedirectProvider = new OIDCProvider({
+        clientId: 'test',
+        issuer: 'https://test-oidc.example.com',
+        authorizationEndpoint: 'https://test-oidc.example.com/auth',
+        tokenEndpoint: 'https://test-oidc.example.com/token',
+        jwksUri: 'https://test-oidc.example.com/jwks',
+        // redirectUri intentionally omitted
+      });
+
+      await expect(noRedirectProvider.getAuthUrl('state'))
+        .rejects.toThrow('redirect_uri is required but not configured');
     });
   });
 
