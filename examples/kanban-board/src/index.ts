@@ -421,6 +421,7 @@ Use the kanban tools to analyze the current state and provide recommendations.`,
   // Setup graceful shutdown
   const shutdown = async () => {
     console.log('\n🛑 Shutting down server...');
+    await server.stop();
     wsServer.close();
     await db.close();
     process.exit(0);

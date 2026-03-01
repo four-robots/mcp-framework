@@ -327,6 +327,37 @@ describe('MCPServer - Comprehensive Tests', () => {
       expect(prompts[0].arguments).toEqual([]);
     });
 
+    it('should detect Zod schema shapes and extract argument names', () => {
+      server.registerPrompt(
+        'zod_prompt',
+        {
+          title: 'Zod Prompt',
+          description: 'A prompt with Zod schema shape',
+          argsSchema: {
+            text: z.string().describe('Text to analyze'),
+            language: z.string().optional()
+          }
+        },
+        ({ text }) => ({
+          messages: [{ role: 'user' as const, content: { type: 'text' as const, text } }]
+        })
+      );
+
+      // Argument names should be extracted from Zod shape keys
+      const prompts = server.getPrompts();
+      const zodPrompt = prompts.find(p => p.name === 'zod_prompt');
+      expect(zodPrompt).toBeDefined();
+      expect(zodPrompt!.arguments).toEqual(['text', 'language']);
+
+      // Zod schema should be passed through to SDK without conversion
+      const [, promptConfig] = mockSDKServer.registerPrompt.mock.calls[
+        mockSDKServer.registerPrompt.mock.calls.length - 1
+      ];
+      expect(promptConfig.argsSchema).toBeDefined();
+      expect(promptConfig.argsSchema.text).toBeDefined();
+      expect(promptConfig.argsSchema.text._def).toBeDefined(); // Zod internal property
+    });
+
     it('should get specific prompt by name', () => {
       server.registerPrompt('prompt1', { description: 'Prompt 1' }, vi.fn());
       server.registerPrompt('prompt2', { description: 'Prompt 2' }, vi.fn());

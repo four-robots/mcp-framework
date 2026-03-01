@@ -147,6 +147,7 @@ export class OIDCProvider extends OAuthProvider {
   private static DISCOVERY_CACHE_TTL = 3600000; // 1 hour
   private jwksCache: { keys: any[]; fetchedAt: number } | null = null;
   private jwksFetchPromise: Promise<any[]> | null = null;
+  private static JWKS_MIN_REFETCH_INTERVAL = 30000; // 30 seconds minimum between JWKS refetches
   private discoveryFetchPromise: Promise<void> | null = null;
   private passportInitialized = false;
   private initializationError: Error | null = null;
@@ -366,12 +367,17 @@ export class OIDCProvider extends OAuthProvider {
       throw new Error('Invalid resource URI format');
     }
     
+    const resolvedRedirectUri = redirectUri || this.config.redirectUri;
+    if (!resolvedRedirectUri) {
+      throw new Error('redirect_uri is required but not configured');
+    }
+
     const params = new URLSearchParams({
       ...this.config.additionalAuthParams,
       client_id: this.config.clientId,
       response_type: 'code',
       scope: this.config.scopes.join(' '),
-      redirect_uri: redirectUri || this.config.redirectUri || '',
+      redirect_uri: resolvedRedirectUri,
     });
     
     if (state) {
@@ -407,10 +413,15 @@ export class OIDCProvider extends OAuthProvider {
       throw new Error('Token endpoint must use HTTPS in production');
     }
     
+    const resolvedRedirectUri = redirectUri || this.config.redirectUri;
+    if (!resolvedRedirectUri) {
+      throw new Error('redirect_uri is required but not configured');
+    }
+
     const params = new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: redirectUri || this.config.redirectUri || '',
+      redirect_uri: resolvedRedirectUri,
       client_id: this.config.clientId,
     });
     
@@ -574,8 +585,11 @@ export class OIDCProvider extends OAuthProvider {
     let keys = await this.fetchJwks();
     let key = keys.find(k => k.kid === kid && (k.use === undefined || k.use === 'sig'));
 
-    // If key not found, refetch in case keys were rotated
-    if (!key) {
+    // If key not found, refetch in case keys were rotated — but only if the cache
+    // is old enough. This prevents an attacker from forcing repeated JWKS fetches
+    // by sending tokens with random kid values.
+    if (!key && this.jwksCache &&
+        (Date.now() - this.jwksCache.fetchedAt) >= OIDCProvider.JWKS_MIN_REFETCH_INTERVAL) {
       this.jwksCache = null;
       keys = await this.fetchJwks();
       key = keys.find(k => k.kid === kid && (k.use === undefined || k.use === 'sig'));

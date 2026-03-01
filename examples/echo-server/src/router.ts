@@ -148,14 +148,16 @@ async function main() {
   console.log(`  - Manual auth control when needed`);
 }
 
+// Run the server
+const serverPromise = main();
+
 // Handle shutdown gracefully
 process.on('SIGINT', () => {
   console.log('\n[Router Example] Shutting down...');
   process.exit(0);
 });
 
-// Run the server
-main().catch((error) => {
+serverPromise.catch((error) => {
   console.error('[Router Example] Fatal error:', error);
   process.exit(1);
 });

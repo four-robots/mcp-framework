@@ -1510,12 +1510,15 @@ export class MCPServer {
       throw MCPErrorFactory.invalidParams(`Prompt '${name}' is already registered`);
     }
 
-    // Track prompt info
+    // Track prompt info — detect whether argsSchema is JSON schema or Zod shape
+    const isJsonSchema = config.argsSchema?.type === 'object' && config.argsSchema?.properties;
     this.prompts.set(name, {
       name,
       title: config.title,
       description: config.description,
-      arguments: config.argsSchema && config.argsSchema.properties ? Object.keys(config.argsSchema.properties) : []
+      arguments: config.argsSchema
+        ? (isJsonSchema ? Object.keys(config.argsSchema.properties) : Object.keys(config.argsSchema))
+        : []
     });
 
     // Create the prompt config object for SDK
@@ -1576,6 +1579,12 @@ export class MCPServer {
   private jsonSchemaToZodShape(jsonSchema: any): any {
     if (!jsonSchema || typeof jsonSchema !== 'object') {
       return {};
+    }
+
+    // Check if input is already a Zod schema shape (values have _def property)
+    const values = Object.values(jsonSchema);
+    if (values.length > 0 && values.every(v => v && typeof v === 'object' && '_def' in (v as any))) {
+      return jsonSchema; // Already Zod, pass through directly
     }
 
     if (jsonSchema.type === 'object' && jsonSchema.properties) {
