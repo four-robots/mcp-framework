@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { randomUUID } from 'crypto';
 
 /**
@@ -343,7 +342,7 @@ export class HttpRateLimitMiddleware {
         const result = await this.store.check(key, maxRequests, windowMs);
 
         if (!result.allowed) {
-          return this.handleRateLimit(req, res, result);
+          return this.handleRateLimit(req, res, result, maxRequests);
         }
 
         // Track response status for skip logic using 'finish' event
@@ -411,7 +410,7 @@ export class HttpRateLimitMiddleware {
         const result = await this.store.check(key, maxRequests, windowMs);
 
         if (!result.allowed) {
-          return this.handleRateLimit(req, res, result);
+          return this.handleRateLimit(req, res, result, maxRequests);
         }
 
         this.addHeaders(res, result, maxRequests);
@@ -429,7 +428,7 @@ export class HttpRateLimitMiddleware {
   /**
    * Handle rate limit exceeded
    */
-  private handleRateLimit(req: any, res: any, result: RateLimitResult) {
+  private handleRateLimit(req: any, res: any, result: RateLimitResult, configuredLimit?: number) {
     if (this.config.onLimitReached) {
       this.config.onLimitReached(req, res, result);
       return;
@@ -437,8 +436,8 @@ export class HttpRateLimitMiddleware {
 
     // Default rate limit response
     const retryAfter = result.retryAfter || RateLimitUtils.calculateRetryAfter(result.resetTime);
-    
-    this.addHeaders(res, result, 0);
+
+    this.addHeaders(res, result, configuredLimit ?? (result.totalRequests + result.remaining));
     res.header('Retry-After', retryAfter.toString());
 
     res.status(429).json({

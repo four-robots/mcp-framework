@@ -332,6 +332,81 @@ describe('Rate Limiting Edge Cases', () => {
       expect(middleware.getStore()).toBeDefined();
     });
 
+    it('should include correct limit in rate limit response headers', async () => {
+      const config: HttpRateLimitConfig = {
+        global: { windowMs: 60000, maxRequests: 10 },
+        headers: { includeHeaders: true },
+      };
+      middleware = new HttpRateLimitMiddleware(config);
+      const globalMiddleware = middleware.createGlobalMiddleware();
+
+      // Exhaust the limit
+      for (let i = 0; i < 10; i++) {
+        mockNext.mockClear();
+        await globalMiddleware(mockReq, mockRes, mockNext);
+      }
+
+      // Next request should be rate limited
+      mockNext.mockClear();
+      mockRes.header.mockClear();
+      await globalMiddleware(mockReq, mockRes, mockNext);
+
+      // Should return 429
+      expect(mockRes.status).toHaveBeenCalledWith(429);
+
+      // X-RateLimit-Limit header should show the actual configured limit (10), not 0
+      const limitHeaderCall = mockRes.header.mock.calls.find(
+        (call: any[]) => call[0] === 'X-RateLimit-Limit'
+      );
+      expect(limitHeaderCall).toBeDefined();
+      expect(limitHeaderCall![1]).toBe('10');
+    });
+
+    it('should include correct limit in per-client rate limit headers', async () => {
+      const config: HttpRateLimitConfig = {
+        perClient: { windowMs: 60000, maxRequests: 5 },
+        headers: { includeHeaders: true },
+      };
+      middleware = new HttpRateLimitMiddleware(config);
+      const clientMiddleware = middleware.createClientMiddleware();
+
+      // Exhaust the limit
+      for (let i = 0; i < 5; i++) {
+        mockNext.mockClear();
+        await clientMiddleware(mockReq, mockRes, mockNext);
+      }
+
+      // Next request should be rate limited
+      mockNext.mockClear();
+      mockRes.header.mockClear();
+      await clientMiddleware(mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(429);
+
+      const limitHeaderCall = mockRes.header.mock.calls.find(
+        (call: any[]) => call[0] === 'X-RateLimit-Limit'
+      );
+      expect(limitHeaderCall).toBeDefined();
+      expect(limitHeaderCall![1]).toBe('5');
+    });
+
+    it('should add remaining count header on allowed requests', async () => {
+      const config: HttpRateLimitConfig = {
+        global: { windowMs: 60000, maxRequests: 5 },
+        headers: { includeHeaders: true },
+      };
+      middleware = new HttpRateLimitMiddleware(config);
+      const globalMiddleware = middleware.createGlobalMiddleware();
+
+      await globalMiddleware(mockReq, mockRes, mockNext);
+
+      const remainingCall = mockRes.header.mock.calls.find(
+        (call: any[]) => call[0] === 'X-RateLimit-Remaining'
+      );
+      expect(remainingCall).toBeDefined();
+      expect(remainingCall![1]).toBe('4'); // 5 limit - 1 used = 4
+    });
+
     it('should use IP-based key as fallback for client middleware', async () => {
       const config: HttpRateLimitConfig = {
         perClient: { windowMs: 60000, maxRequests: 1 },
