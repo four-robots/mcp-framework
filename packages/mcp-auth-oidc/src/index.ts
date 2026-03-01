@@ -1039,23 +1039,36 @@ export class OIDCProvider extends OAuthProvider {
       res.clearCookie('connect.sid');
 
       (req as any).logout((err: any) => {
+        // Always attempt to destroy the session regardless of logout result
+        // to prevent session fixation if logout partially fails
+        const destroySession = (callback: (destroyErr?: any) => void) => {
+          if ((req as any).session) {
+            (req as any).session.destroy((destroyErr: any) => {
+              if (destroyErr) {
+                console.error('Failed to destroy session:', destroyErr);
+              }
+              callback(destroyErr);
+            });
+          } else {
+            callback();
+          }
+        };
+
         if (err) {
-          res.status(500).json(createOAuthError('server_error', 'Logout failed'));
+          console.error('Passport logout failed:', err);
+          destroySession(() => {
+            res.status(500).json(createOAuthError('server_error', 'Logout failed'));
+          });
           return;
         }
-        // Destroy the session to prevent session fixation
-        if ((req as any).session) {
-          (req as any).session.destroy((destroyErr: any) => {
-            if (destroyErr) {
-              console.error('Failed to destroy session:', destroyErr);
-              res.status(500).json(createOAuthError('server_error', 'Failed to destroy session'));
-              return;
-            }
-            res.json({ success: true });
-          });
-        } else {
+
+        destroySession((destroyErr) => {
+          if (destroyErr) {
+            res.status(500).json(createOAuthError('server_error', 'Failed to destroy session'));
+            return;
+          }
           res.json({ success: true });
-        }
+        });
       });
     });
 
