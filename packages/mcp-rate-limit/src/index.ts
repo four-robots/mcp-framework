@@ -179,22 +179,6 @@ export interface HttpRateLimitConfig {
     keyGenerator?: (req: any) => string;
   };
   
-  // Per-endpoint limits
-  perEndpoint?: {
-    [endpoint: string]: {
-      windowMs: number;
-      maxRequests: number;
-    };
-  };
-  
-  // OAuth client-specific limits
-  oauthClientLimits?: {
-    [clientId: string]: {
-      windowMs: number;
-      maxRequests: number;
-    };
-  };
-  
   // Rate limit headers
   headers?: {
     includeHeaders?: boolean;

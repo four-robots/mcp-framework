@@ -117,6 +117,9 @@ export class SSETransport implements Transport {
         const writeOk = res.write(`data: ${JSON.stringify({ sessionId })}\n\n`);
         if (!writeOk) {
           this.transports.delete(sessionId);
+          transport.close().catch((err) => {
+            console.error(`Error closing SSE transport ${sessionId} on backpressure:`, err);
+          });
           return;
         }
 
