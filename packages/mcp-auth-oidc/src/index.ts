@@ -227,6 +227,7 @@ export class OIDCProvider extends OAuthProvider {
     const discovery = await this.getDiscovery();
     const sessionConfig = this.config.session!;
 
+    const hasUserInfoEndpoint = !!discovery.userinfo_endpoint;
     passport.use('oidc', new OpenIDConnectStrategy({
       issuer: discovery.issuer,
       authorizationURL: discovery.authorization_endpoint,
@@ -236,7 +237,7 @@ export class OIDCProvider extends OAuthProvider {
       clientSecret: this.config.clientSecret || '',
       callbackURL: sessionConfig.callbackUrl,
       scope: this.config.scopes,
-      skipUserProfile: false,
+      skipUserProfile: !hasUserInfoEndpoint,
     }, this.passportVerifyCallback.bind(this)) as any);
 
     passport.serializeUser((user: any, done) => {

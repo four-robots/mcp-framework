@@ -235,6 +235,38 @@ describe('SSETransport Edge Cases', () => {
       expect((transport as any).config.allowedHosts).toEqual(['myapp.local', '127.0.0.1']);
     });
 
+    it('should not apply CORS middleware when cors config is not provided', async () => {
+      transport = new SSETransport({
+        port: 0,
+        host: '127.0.0.1',
+        enableDnsRebindingProtection: false,
+      });
+      // cors config should be undefined when not explicitly provided
+      expect((transport as any).config.cors).toBeUndefined();
+
+      await transport.start(server);
+      const baseUrl = transport.getBaseUrl();
+
+      // Without CORS middleware, preflight OPTIONS requests won't get
+      // Access-Control-Allow-Origin headers
+      const response = await fetch(`${baseUrl}health`, {
+        method: 'OPTIONS',
+        headers: { 'Origin': 'http://evil.com' },
+      });
+      const acaoHeader = response.headers.get('access-control-allow-origin');
+      expect(acaoHeader).toBeNull();
+    });
+
+    it('should apply CORS with explicit config', async () => {
+      transport = new SSETransport({
+        port: 0,
+        host: '127.0.0.1',
+        enableDnsRebindingProtection: false,
+        cors: { origin: 'http://allowed.com' },
+      });
+      expect((transport as any).config.cors).toBeDefined();
+    });
+
     it('should work normally when DNS rebinding protection is disabled', async () => {
       transport = new SSETransport({
         port: 0,

@@ -602,9 +602,45 @@ describe('MCP Elicitation System', () => {
       client.registerElicitationHandler(invalidHandler);
 
       const response = await client.handleElicitationRequest(testRequest);
-      
-      // Should fall back to cancel if validation fails
+
+      // Should return cancel with validation error details
       expect(response.action).toBe(ElicitationAction.Cancel);
+      expect(response.reason).toContain('Validation failed');
+    });
+
+    it('should distinguish validation errors from handler crashes', async () => {
+      const testRequest: ElicitationRequest = {
+        id: 'test',
+        title: 'Test',
+        fields: [
+          {
+            name: 'name',
+            type: 'text',
+            label: 'Name',
+            required: true
+          }
+        ]
+      };
+
+      // First handler crashes, second returns invalid values
+      const crashingHandler: ElicitationHandler = vi.fn().mockRejectedValue(new Error('Handler crash'));
+      const invalidHandler: ElicitationHandler = vi.fn().mockResolvedValue({
+        id: 'test',
+        action: ElicitationAction.Accept,
+        values: { name: '' }
+      });
+
+      client.registerElicitationHandler(crashingHandler);
+      client.registerElicitationHandler(invalidHandler);
+
+      const response = await client.handleElicitationRequest(testRequest);
+
+      // Crashing handler should be skipped, invalid handler's response should
+      // be caught by validation (not treated as a crash)
+      expect(crashingHandler).toHaveBeenCalled();
+      expect(invalidHandler).toHaveBeenCalled();
+      expect(response.action).toBe(ElicitationAction.Cancel);
+      expect(response.reason).toContain('Validation failed');
     });
   });
 

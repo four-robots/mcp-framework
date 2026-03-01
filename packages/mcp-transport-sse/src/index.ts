@@ -12,7 +12,7 @@ export interface SSEConfig {
   port: number;
   host: string;
   basePath: string;
-  cors: cors.CorsOptions;
+  cors?: cors.CorsOptions;
   enableDnsRebindingProtection: boolean;
   allowedHosts: string[];
 }
@@ -39,7 +39,7 @@ export class SSETransport implements Transport {
       basePath,
       enableDnsRebindingProtection: config.enableDnsRebindingProtection ?? true,
       allowedHosts: config.allowedHosts ?? ["127.0.0.1", "localhost"],
-      cors: config.cors ?? {},
+      cors: config.cors,
     };
     
     this.app = express();
@@ -90,10 +90,19 @@ export class SSETransport implements Transport {
       let transport: SSEServerTransport | undefined;
 
       try {
-        // Create SSE transport and connect to SDK server before exposing to clients
+        if (!this.mcpServer) {
+          res.status(503).json({ error: "Server not initialized" });
+          return;
+        }
+
+        // Create SSE transport
         transport = new SSEServerTransport(basePath + "messages", res);
 
-        // Register close handler BEFORE connect so early disconnects are caught
+        // Register transport BEFORE connect so the close handler can always
+        // find it, even if the client disconnects during connect()
+        this.transports.set(sessionId, transport);
+
+        // Register close handler
         res.on("close", () => {
           const closedTransport = this.transports.get(sessionId);
           this.transports.delete(sessionId);
@@ -104,15 +113,8 @@ export class SSETransport implements Transport {
           }
         });
 
-        if (!this.mcpServer) {
-          res.status(503).json({ error: "Server not initialized" });
-          return;
-        }
         const sdkServer = this.mcpServer.getSDKServer();
         await sdkServer.connect(transport);
-
-        // Now that the transport is connected, register it and notify the client
-        this.transports.set(sessionId, transport);
 
         // Send session ID as first event
         const writeOk = res.write(`data: ${JSON.stringify({ sessionId })}\n\n`);
