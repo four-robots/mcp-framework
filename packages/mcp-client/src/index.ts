@@ -832,6 +832,71 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
     }
   }
 
+  // ====================================================================
+  // Resource Subscriptions (MCP 2025-11-25)
+  // ====================================================================
+
+  /**
+   * Subscribe to updates for a specific resource URI.
+   * The server will send notifications when the resource changes.
+   */
+  async subscribeResource(uri: string): Promise<void> {
+    const client = this.getSDKClient();
+    if (!client) {
+      throw new Error('Client is not connected');
+    }
+    await client.request({
+      method: 'resources/subscribe',
+      params: { uri }
+    } as any, {} as any);
+  }
+
+  /**
+   * Unsubscribe from updates for a specific resource URI.
+   */
+  async unsubscribeResource(uri: string): Promise<void> {
+    const client = this.getSDKClient();
+    if (!client) {
+      throw new Error('Client is not connected');
+    }
+    await client.request({
+      method: 'resources/unsubscribe',
+      params: { uri }
+    } as any, {} as any);
+  }
+
+  // ====================================================================
+  // Roots Support (MCP 2025-11-25)
+  // ====================================================================
+
+  private roots: Array<{ uri: string; name?: string }> = [];
+  private rootsChangeCallbacks: Array<() => void> = [];
+
+  /**
+   * Set the roots that this client exposes to the server.
+   * Sends a roots/list_changed notification if connected.
+   */
+  setRoots(roots: Array<{ uri: string; name?: string }>): void {
+    this.roots = [...roots];
+    // Notify server that roots have changed
+    if (this.isConnected()) {
+      this.sendMessage({
+        jsonrpc: '2.0',
+        method: 'notifications/roots/list_changed',
+        params: {}
+      } as any).catch(() => {
+        // Ignore notification failures
+      });
+    }
+  }
+
+  /**
+   * Get the current roots list.
+   */
+  getRoots(): Array<{ uri: string; name?: string }> {
+    return [...this.roots];
+  }
+
   /**
    * Clean up resources
    */

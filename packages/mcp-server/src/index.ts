@@ -1,6 +1,14 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { McpServer as SDKMcpServer, ResourceTemplate as SDKResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { CallToolResult, ServerNotification, ServerRequest, CompleteRequestSchema, CreateMessageRequestSchema, CompleteResult, CreateMessageResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolResult, ServerNotification, ServerRequest,
+  CreateMessageRequestSchema,
+  CompleteResult, CreateMessageResult, ToolAnnotations,
+  Icon, Implementation,
+  Root, ListRootsRequestSchema, ListRootsResultSchema,
+  SubscribeRequestSchema, UnsubscribeRequestSchema,
+  ElicitRequestSchema, ElicitResult, ElicitResultSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { MCPErrorFactory, MCPErrorClass, MCPError, MCPErrorCode } from "./errors.js";
 import { SdkToolConfig, SdkToolResult } from "./tools.js";
@@ -428,6 +436,12 @@ export interface ToolConfig<Schema extends z.AnyZodObject = z.AnyZodObject> {
   title?: string;
   description: string;
   inputSchema: Schema;
+  /** JSON Schema defining the expected structured output (MCP 2025-11-25) */
+  outputSchema?: Record<string, any>;
+  /** Tool annotations for behavior hints */
+  annotations?: ToolAnnotations;
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
 }
 
 /**
@@ -437,6 +451,8 @@ export interface ResourceConfig {
   title?: string;
   description?: string;
   mimeType?: string;
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
 }
 
 /**
@@ -449,6 +465,8 @@ export interface ResourceTemplate {
   description?: string;
   mimeType?: string;
   annotations?: Record<string, any>;
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
 }
 
 /**
@@ -460,6 +478,8 @@ export interface ResourceTemplateConfig {
   mimeType?: string;
   annotations?: Record<string, any>;
   parameterSchema?: Record<string, any>; // JSON schema for template parameters
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
 }
 
 /**
@@ -489,6 +509,8 @@ export interface ResourceTemplateInfo {
   mimeType?: string;
   annotations?: Record<string, any>;
   parameterSchema?: Record<string, any>;
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
 }
 
 /**
@@ -571,7 +593,7 @@ export interface SamplingRequest {
  */
 export interface SamplingResponse {
   model?: string;
-  stopReason?: 'endTurn' | 'stopSequence' | 'maxTokens';
+  stopReason?: 'endTurn' | 'stopSequence' | 'maxTokens' | 'toolUse';
   role: 'assistant';
   content: {
     type: 'text';
@@ -623,6 +645,8 @@ export interface PromptConfig {
   title?: string;
   description?: string;
   argsSchema?: any; // JSON schema object with properties structure
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
 }
 
 /**
@@ -927,6 +951,14 @@ export class RequestTracer {
 export interface ServerConfig {
   name: string;
   version: string;
+  /** Human-readable display title for this server (MCP 2025-11-25) */
+  title?: string;
+  /** Human-readable description of this server (MCP 2025-11-25) */
+  description?: string;
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
+  /** URL for the server's website (MCP 2025-11-25) */
+  websiteUrl?: string;
   capabilities?: object;
   propagateErrors?: boolean;
   pagination?: {
@@ -957,6 +989,12 @@ export interface ToolInfo<Schema extends z.AnyZodObject = z.AnyZodObject> {
   title?: string;
   description: string;
   inputSchema: Schema;
+  /** JSON Schema defining expected structured output (MCP 2025-11-25) */
+  outputSchema?: Record<string, any>;
+  /** Tool annotations for behavior hints */
+  annotations?: ToolAnnotations;
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
 }
 
 /**
@@ -968,6 +1006,8 @@ export interface ResourceInfo {
   title?: string;
   description?: string;
   mimeType?: string;
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
 }
 
 /**
@@ -978,6 +1018,8 @@ export interface PromptInfo {
   title?: string;
   description?: string;
   arguments?: any[];
+  /** Icons for display in UIs (MCP 2025-11-25) */
+  icons?: Icon[];
 }
 
 /**
@@ -1059,12 +1101,25 @@ export class MCPServer {
   // Session management
   private sessionManager: SessionManager | null = null;
 
+  // Resource subscription tracking (MCP 2025-11-25)
+  private resourceSubscriptions: Map<string, Set<string>> = new Map(); // uri -> set of sessionIds
+
+  // Roots change callback (MCP 2025-11-25)
+  private rootsChangeHandlers: Array<(roots: Root[]) => void> = [];
+
   constructor(config: ServerConfig) {
     this.config = config;
-    this.sdkServer = new SDKMcpServer({
+    // Build Implementation object per MCP 2025-11-25 spec
+    const serverInfo: Implementation = {
       name: config.name,
       version: config.version,
-      capabilities: config.capabilities
+      ...(config.title && { title: config.title }),
+      ...(config.description && { description: config.description }),
+      ...(config.icons && { icons: config.icons }),
+      ...(config.websiteUrl && { websiteUrl: config.websiteUrl }),
+    };
+    this.sdkServer = new SDKMcpServer(serverInfo, {
+      capabilities: config.capabilities as any,
     });
 
     // Initialize pagination configuration
@@ -1386,13 +1441,25 @@ export class MCPServer {
       );
     }
 
+    // Validate tool name format per MCP 2025-11-25 (SHOULD be 1-128 chars, A-Z a-z 0-9 _ - .)
+    if (name.length > 128 || !/^[A-Za-z0-9_.\-]+$/.test(name)) {
+      console.warn(
+        `Warning: Tool name '${name}' does not follow MCP naming convention ` +
+        `(1-128 chars, only A-Z, a-z, 0-9, _, -, .)`
+      );
+    }
+
     this.tools.set(name, {
       name,
       title: config.title,
       description: config.description,
       inputSchema: config.inputSchema,
+      outputSchema: config.outputSchema,
+      annotations: config.annotations,
+      icons: config.icons,
     });
 
+    // Build SDK tool config with all new MCP 2025-11-25 fields
     const toolConfig: SdkToolConfig = {
       description: config.description,
       inputSchema: config.inputSchema.shape,
@@ -1401,10 +1468,23 @@ export class MCPServer {
     if (config.title) {
       toolConfig.title = config.title;
     }
+    if (config.annotations) {
+      toolConfig.annotations = config.annotations;
+    }
+    if (config.icons) {
+      toolConfig.icons = config.icons;
+    }
 
-    this.sdkServer.registerTool(
+    // Convert outputSchema to Zod shape if it's a JSON Schema object
+    if (config.outputSchema) {
+      const outputShape = this.jsonSchemaToZodShape(config.outputSchema);
+      toolConfig.outputSchema = outputShape;
+    }
+
+    // Use the SDK's registerTool - cast needed due to dynamic schema types
+    (this.sdkServer as any).registerTool(
       name,
-      toolConfig as any,
+      toolConfig,
       async (args: any, extra: any) => {
         const tracedContext = this.requestTracer.startTrace(`tool_call:${name}`, this.getContext());
 
@@ -1456,7 +1536,8 @@ export class MCPServer {
       uri: typeof uriTemplate === 'string' ? uriTemplate : uriTemplate.uriTemplate,
       title: config.title,
       description: config.description,
-      mimeType: config.mimeType
+      mimeType: config.mimeType,
+      icons: config.icons,
     });
 
     // Wrap handler with error handling and tracing
@@ -1518,7 +1599,8 @@ export class MCPServer {
       description: config.description,
       arguments: config.argsSchema
         ? (isJsonSchema ? Object.keys(config.argsSchema.properties) : Object.keys(config.argsSchema))
-        : []
+        : [],
+      icons: config.icons,
     });
 
     // Create the prompt config object for SDK
@@ -1794,28 +1876,9 @@ export class MCPServer {
    * Register logging endpoints with the SDK server
    */
   private registerLoggingEndpoints(): void {
-    // Register logging/setLevel endpoint 
-    const LoggingRequestSchema = z.object({
-      method: z.literal('logging/setLevel'),
-      params: z.object({
-        level: z.string(),
-        logger: z.string().optional()
-      })
-    });
-
-    if (this.sdkServer.server && this.sdkServer.server.setRequestHandler) {
-      try {
-        this.sdkServer.server.setRequestHandler(LoggingRequestSchema, async (request: any) => {
-          const { level, logger } = request.params;
-          const logLevel = this.nameToLogLevel(level);
-          await this.setLogLevel(logLevel, logger);
-          return { success: true };
-        });
-      } catch (error) {
-        // Ignore logging registration errors in test environments
-        // The SDK server may not support logging capabilities
-      }
-    }
+    // Logging endpoint registration is handled by the SDK server automatically
+    // when logging capabilities are enabled. We keep this as a hook for
+    // custom logging level management.
   }
 
   /**
@@ -2225,7 +2288,8 @@ export class MCPServer {
       description: config.description,
       mimeType: config.mimeType,
       annotations: config.annotations,
-      parameterSchema: config.parameterSchema
+      parameterSchema: config.parameterSchema,
+      icons: config.icons,
     });
 
     // Create template object for SDK
@@ -2805,8 +2869,8 @@ export class MCPServer {
         throw MCPErrorFactory.invalidParams(`Invalid content at message ${index}: must be an object`);
       }
 
-      if (!message.content.type || !['text', 'image'].includes(message.content.type)) {
-        throw MCPErrorFactory.invalidParams(`Invalid content type at message ${index}: must be text or image`);
+      if (!message.content.type || !['text', 'image', 'audio', 'resource'].includes(message.content.type)) {
+        throw MCPErrorFactory.invalidParams(`Invalid content type at message ${index}: must be text, image, audio, or resource`);
       }
 
       if (message.content.type === 'text' && !message.content.text) {
@@ -2918,11 +2982,15 @@ export class MCPServer {
       throw MCPErrorFactory.internalError('Sampling response must have content object');
     }
 
-    if (response.content.type !== 'text' || typeof response.content.text !== 'string') {
-      throw MCPErrorFactory.internalError('Sampling response content must be text type with string text');
+    if (!response.content.type || !['text', 'image', 'audio', 'resource'].includes(response.content.type)) {
+      throw MCPErrorFactory.internalError('Sampling response content must have a valid type');
     }
 
-    if (response.stopReason && !['endTurn', 'stopSequence', 'maxTokens'].includes(response.stopReason)) {
+    if (response.content.type === 'text' && typeof response.content.text !== 'string') {
+      throw MCPErrorFactory.internalError('Sampling response text content must have string text');
+    }
+
+    if (response.stopReason && !['endTurn', 'stopSequence', 'maxTokens', 'toolUse'].includes(response.stopReason)) {
       throw MCPErrorFactory.internalError('Invalid stop reason in sampling response');
     }
 
@@ -2958,6 +3026,149 @@ export class MCPServer {
 
     return this.handleSampling(request);
   }
+
+  // ====================================================================
+  // Resource Subscriptions (MCP 2025-11-25)
+  // ====================================================================
+
+  /**
+   * Subscribe to resource updates for a specific URI.
+   * Clients can call this to receive notifications when a subscribed resource changes.
+   */
+  subscribeResource(uri: string, sessionId?: string): void {
+    if (!uri || typeof uri !== 'string') {
+      throw MCPErrorFactory.invalidParams('Resource URI must be a non-empty string');
+    }
+    const key = sessionId || '__default__';
+    if (!this.resourceSubscriptions.has(uri)) {
+      this.resourceSubscriptions.set(uri, new Set());
+    }
+    this.resourceSubscriptions.get(uri)!.add(key);
+  }
+
+  /**
+   * Unsubscribe from resource updates for a specific URI.
+   */
+  unsubscribeResource(uri: string, sessionId?: string): void {
+    if (!uri || typeof uri !== 'string') {
+      throw MCPErrorFactory.invalidParams('Resource URI must be a non-empty string');
+    }
+    const key = sessionId || '__default__';
+    const subscribers = this.resourceSubscriptions.get(uri);
+    if (subscribers) {
+      subscribers.delete(key);
+      if (subscribers.size === 0) {
+        this.resourceSubscriptions.delete(uri);
+      }
+    }
+  }
+
+  /**
+   * Check if any client is subscribed to a specific resource URI.
+   */
+  hasResourceSubscribers(uri: string): boolean {
+    return this.resourceSubscriptions.has(uri) &&
+      this.resourceSubscriptions.get(uri)!.size > 0;
+  }
+
+  /**
+   * Get all subscribed resource URIs.
+   */
+  getSubscribedResources(): string[] {
+    return Array.from(this.resourceSubscriptions.keys());
+  }
+
+  /**
+   * Notify all subscribers that a resource has been updated.
+   * Only sends notification if the resource has active subscribers.
+   */
+  async notifyResourceUpdated(uri: string): Promise<void> {
+    if (this.hasResourceSubscribers(uri)) {
+      await this.sendResourceUpdatedNotification(uri);
+    }
+  }
+
+  // ====================================================================
+  // Roots Support (MCP 2025-11-25)
+  // ====================================================================
+
+  /**
+   * Request the list of roots from the connected client.
+   * Returns the client's filesystem roots (if the client supports roots).
+   */
+  async requestRoots(): Promise<Root[]> {
+    if (!this.sdkServer.server) {
+      throw MCPErrorFactory.invalidRequest('Server is not connected');
+    }
+
+    try {
+      const result = await (this.sdkServer.server as any).request(
+        { method: 'roots/list', params: {} },
+        ListRootsResultSchema
+      );
+      return result?.roots || [];
+    } catch (error) {
+      // Client may not support roots - return empty list
+      return [];
+    }
+  }
+
+  /**
+   * Register a handler to be called when the client's roots list changes.
+   * Returns an unsubscribe function.
+   */
+  onRootsChanged(handler: (roots: Root[]) => void): () => void {
+    this.rootsChangeHandlers.push(handler);
+    return () => {
+      const index = this.rootsChangeHandlers.indexOf(handler);
+      if (index >= 0) {
+        this.rootsChangeHandlers.splice(index, 1);
+      }
+    };
+  }
+
+  // ====================================================================
+  // Elicitation Support (MCP 2025-11-25)
+  // ====================================================================
+
+  /**
+   * Send an elicitation request to the connected client using JSON Schema format.
+   * The client will present a form to the user and return the results.
+   *
+   * @param message - Human-readable message describing what information is needed
+   * @param requestedSchema - JSON Schema object defining the form fields
+   * @returns The elicitation result with action and content
+   */
+  async sendElicitationRequest(
+    message: string,
+    requestedSchema: Record<string, any>,
+  ): Promise<ElicitResult> {
+    if (!this.sdkServer.server) {
+      throw MCPErrorFactory.invalidRequest('Server is not connected');
+    }
+
+    try {
+      const result = await (this.sdkServer.server as any).request(
+        {
+          method: 'elicitation/create',
+          params: {
+            message,
+            requestedSchema,
+          }
+        },
+        ElicitResultSchema
+      );
+      return result;
+    } catch (error) {
+      throw MCPErrorFactory.internalError(
+        `Elicitation request failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  // ====================================================================
+  // Request Tracing & Performance
+  // ====================================================================
 
   /**
    * Get the request tracer for direct access to tracing capabilities
@@ -3016,7 +3227,16 @@ export class MCPServer {
 
 // Re-export common types from the SDK
 export { z } from "zod";
-export type { CallToolResult as ToolResult } from "@modelcontextprotocol/sdk/types";
+export type { CallToolResult as ToolResult } from "@modelcontextprotocol/sdk/types.js";
+
+// Re-export MCP 2025-11-25 spec types from the SDK
+export type {
+  Icon,
+  Implementation,
+  ToolAnnotations,
+  Root,
+  ElicitResult,
+} from "@modelcontextprotocol/sdk/types.js";
 
 // Re-export error types
 export {

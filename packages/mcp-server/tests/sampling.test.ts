@@ -543,7 +543,7 @@ describe('MCP Sampling System', () => {
         model: 'test-model',
         role: 'assistant',
         content: {
-          type: 'image', // Invalid: should be 'text'
+          type: 'invalid_type', // Invalid content type
           text: 'Response'
         } as any
       });
@@ -559,7 +559,7 @@ describe('MCP Sampling System', () => {
 
       await expect(server.createSamplingMessage(request)).rejects.toThrow(
         expect.objectContaining({
-          message: expect.stringContaining('Sampling response content must be text type')
+          message: expect.stringContaining('Sampling response content must have a valid type')
         })
       );
     });
