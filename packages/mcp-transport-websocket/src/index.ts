@@ -24,7 +24,6 @@ export interface WebSocketConfig {
   maxConnections?: number;
   heartbeatInterval?: number;
   connectionTimeout?: number;
-  messageTimeout?: number;
   maxMessageSize?: number;
   enableCompression?: boolean;
   enablePerMessageDeflate?: boolean;
@@ -316,7 +315,6 @@ export class WebSocketTransport implements Transport {
       maxConnections: 100,
       heartbeatInterval: 30000, // 30 seconds
       connectionTimeout: 10000, // 10 seconds
-      messageTimeout: 30000, // 30 seconds
       maxMessageSize: 1024 * 1024, // 1MB
       enableCompression: true,
       enablePerMessageDeflate: true,

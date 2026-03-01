@@ -574,22 +574,28 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
     try {
       // Try each registered handler until one succeeds
       for (const handler of this.elicitationHandlers) {
+        let response: ElicitationResponse;
         try {
-          const response = await handler(request);
-          
-          // Validate response
-          if (response.action === ElicitationAction.Accept && response.values) {
-            const validationErrors = this.validateElicitationValues(request.fields, response.values);
-            if (validationErrors.length > 0) {
-              throw new Error(`Validation failed: ${validationErrors.map(e => e.message).join(', ')}`);
-            }
-          }
-          
-          return response;
+          response = await handler(request);
         } catch (error) {
           console.error('Elicitation handler failed:', error);
           continue;
         }
+
+        // Validate response outside the handler try-catch so validation
+        // errors are not confused with handler crashes
+        if (response.action === ElicitationAction.Accept && response.values) {
+          const validationErrors = this.validateElicitationValues(request.fields, response.values);
+          if (validationErrors.length > 0) {
+            return {
+              id: request.id,
+              action: ElicitationAction.Cancel,
+              reason: `Validation failed: ${validationErrors.map(e => e.message).join(', ')}`
+            };
+          }
+        }
+
+        return response;
       }
 
       // No handler succeeded, return cancel response

@@ -288,16 +288,25 @@ async function main() {
   console.log(`   - Use 'list_tools' to see all available tools`);
   console.log(`   - Use 'calculate' to perform math operations`);
   console.log(`   - Access the same server via HTTP or stdio!\n`);
+
+  return server;
 }
 
-// Handle shutdown gracefully
-process.on('SIGINT', () => {
-  console.log('\n👋 Shutting down multi-transport server...');
-  process.exit(0);
-});
-
 // Run the server
-main().catch((error) => {
+let serverInstance: MCPServer | undefined;
+
+main().then((server) => {
+  serverInstance = server;
+}).catch((error) => {
   console.error('❌ Fatal error:', error);
   process.exit(1);
+});
+
+// Handle shutdown gracefully
+process.on('SIGINT', async () => {
+  console.log('\n👋 Shutting down multi-transport server...');
+  if (serverInstance) {
+    await serverInstance.stop();
+  }
+  process.exit(0);
 });

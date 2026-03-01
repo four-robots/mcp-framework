@@ -1,6 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { ResourceMetadata, McpServer as SDKMcpServer, ToolCallback, ResourceTemplate as SDKResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol";
+import { McpServer as SDKMcpServer, ResourceTemplate as SDKResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult, ServerNotification, ServerRequest, CompleteRequestSchema, CreateMessageRequestSchema, CompleteResult, CreateMessageResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { MCPErrorFactory, MCPErrorClass, MCPError, MCPErrorCode } from "./errors.js";
@@ -2898,8 +2897,8 @@ export class MCPServer {
       throw MCPErrorFactory.internalError('Sampling response must have a model string');
     }
 
-    if (!['user', 'assistant'].includes(response.role)) {
-      throw MCPErrorFactory.internalError('Sampling response role must be user or assistant');
+    if (response.role !== 'assistant') {
+      throw MCPErrorFactory.internalError('Sampling response role must be assistant');
     }
 
     if (!response.content || typeof response.content !== 'object') {
