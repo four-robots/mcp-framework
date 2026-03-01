@@ -655,32 +655,28 @@ export class CorrelationManager {
    * Generate a unique correlation ID
    */
   static generateCorrelationId(): string {
-    return `corr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `corr_${Date.now()}_${randomBytes(6).toString('hex')}`;
   }
 
   /**
    * Generate a unique request ID
    */
   static generateRequestId(): string {
-    return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `req_${Date.now()}_${randomBytes(6).toString('hex')}`;
   }
 
   /**
    * Generate a unique trace ID
    */
   static generateTraceId(): string {
-    // Using crypto.randomUUID if available, fallback to timestamp+random
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    return `trace_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `trace_${randomBytes(16).toString('hex')}`;
   }
 
   /**
    * Generate a unique span ID
    */
   static generateSpanId(): string {
-    return `span_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `span_${randomBytes(8).toString('hex')}`;
   }
 
   /**
@@ -1125,7 +1121,7 @@ export class MCPServer {
    */
   private createCursor(sortKey: string, timestamp: number = Date.now()): string {
     const cursor: PaginationCursor = {
-      token: Math.random().toString(36).substring(2, 15),
+      token: randomBytes(8).toString('hex'),
       timestamp,
       sortKey
     };
