@@ -229,7 +229,7 @@ export class HttpMCPClient extends BaseMCPClient {
     const responseSchema = z.object({}).passthrough(); // Allow any additional properties
     
     try {
-      const response = await this.client.request(message as any, responseSchema);
+      const response = await this.client.request(message as any, responseSchema as any);
       return {
         jsonrpc: '2.0',
         id: message.id,
