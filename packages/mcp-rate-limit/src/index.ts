@@ -78,7 +78,11 @@ export class MemoryRateLimiter implements RateLimiter {
     // Update window parameters if they changed
     if (window.limit !== limit || window.windowMs !== windowMs) {
       window.limit = limit;
-      window.windowMs = windowMs;
+      if (window.windowMs !== windowMs) {
+        window.windowMs = windowMs;
+        // Recalculate resetTime so the new window duration takes effect immediately
+        window.resetTime = now + windowMs;
+      }
     }
 
     // Check if request is allowed

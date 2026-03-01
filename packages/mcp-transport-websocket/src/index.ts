@@ -154,6 +154,11 @@ export class WebSocketConnection {
   }
 
   private startHeartbeat(): void {
+    // Clear any existing heartbeat to prevent interval leaks
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
     if (this.config.heartbeatInterval > 0) {
       this.heartbeatTimer = setInterval(() => {
         if (this.ws.readyState === WebSocket.OPEN) {
@@ -165,10 +170,7 @@ export class WebSocketConnection {
   }
 
   private resetHeartbeat(): void {
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.startHeartbeat();
-    }
+    this.startHeartbeat();
   }
 
   private cleanup(): void {

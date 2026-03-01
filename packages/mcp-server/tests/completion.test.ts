@@ -614,5 +614,68 @@ describe('MCP Completion System', () => {
         (server as any).handleCompletion(request, true)
       ).rejects.toThrow('Handler error');
     });
+
+    it('should propagate errors from getCompletions when ServerConfig.propagateErrors is true', async () => {
+      const errorServer = new MCPServer({
+        name: 'error-server',
+        version: '1.0.0',
+        propagateErrors: true
+      });
+
+      // Register a prompt so the reference exists
+      errorServer.registerPrompt('error-prompt', {
+        title: 'Error Prompt'
+      }, vi.fn());
+
+      // Register a failing completion handler
+      const faultyHandler: CompletionHandler = vi.fn().mockRejectedValue(
+        new Error('Config propagation test')
+      );
+
+      errorServer.registerCompletion({
+        name: 'config-error-completion',
+        supportedTypes: ['ref/prompt']
+      }, faultyHandler);
+
+      // getCompletions should propagate the error because config.propagateErrors=true
+      await expect(
+        errorServer.getCompletions(
+          { type: 'ref/prompt', name: 'error-prompt' },
+          { name: 'arg', value: 'val' }
+        )
+      ).rejects.toThrow('Config propagation test');
+    });
+
+    it('should not propagate errors from getCompletions when ServerConfig.propagateErrors is false', async () => {
+      const safeServer = new MCPServer({
+        name: 'safe-server',
+        version: '1.0.0',
+        propagateErrors: false
+      });
+
+      // Register a prompt so the reference exists
+      safeServer.registerPrompt('safe-prompt', {
+        title: 'Safe Prompt'
+      }, vi.fn());
+
+      // Register a failing completion handler
+      const faultyHandler: CompletionHandler = vi.fn().mockRejectedValue(
+        new Error('Should not propagate')
+      );
+
+      safeServer.registerCompletion({
+        name: 'safe-error-completion',
+        supportedTypes: ['ref/prompt']
+      }, faultyHandler);
+
+      // getCompletions should return empty result, NOT throw
+      const result = await safeServer.getCompletions(
+        { type: 'ref/prompt', name: 'safe-prompt' },
+        { name: 'arg', value: 'val' }
+      );
+
+      expect(result.completion.values).toEqual([]);
+      expect(result.completion.total).toBe(0);
+    });
   });
 });

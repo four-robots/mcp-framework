@@ -145,6 +145,22 @@ describe('Rate Limiting Edge Cases', () => {
       expect(result.allowed).toBe(false);
     });
 
+    it('should update resetTime when windowMs changes mid-window', async () => {
+      const key = 'window-change';
+
+      // Create window with 60s window
+      const result1 = await rateLimiter.check(key, 10, 60000);
+      expect(result1.allowed).toBe(true);
+      const originalResetTime = result1.resetTime;
+
+      // Change windowMs to 5s — resetTime should update to be ~5s from now
+      const result2 = await rateLimiter.check(key, 10, 5000);
+      expect(result2.allowed).toBe(true);
+      expect(result2.resetTime).toBeLessThan(originalResetTime);
+      // New reset time should be approximately now + 5s, not original now + 60s
+      expect(result2.resetTime - Date.now()).toBeLessThanOrEqual(5000);
+    });
+
     it('should track active windows and keys', async () => {
       await rateLimiter.check('key-a', 5, 60000);
       await rateLimiter.check('key-b', 5, 60000);

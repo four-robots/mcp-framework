@@ -433,13 +433,40 @@ describe('WebSocketConnection', () => {
     it('should not start heartbeat if interval is 0', () => {
       const noHeartbeatConfig = { ...config, heartbeatInterval: 0 };
       const noHeartbeatConnection = new WebSocketConnection(mockWs as any, noHeartbeatConfig);
-      
+
       mockWs.readyState = WebSocket.OPEN;
       mockWs.emit('open');
-      
+
       setTimeout(() => {
         expect(mockWs.ping).not.toHaveBeenCalled();
       }, 100);
+    });
+
+    it('should not leak intervals when startHeartbeat is called multiple times via pong resets', (done) => {
+      // Use a short heartbeat interval so the test runs quickly
+      const fastConfig = { ...config, heartbeatInterval: 50 };
+      const fastMockWs = new MockWebSocket();
+      const fastConnection = new WebSocketConnection(fastMockWs as any, fastConfig);
+
+      fastMockWs.readyState = WebSocket.OPEN;
+      fastMockWs.emit('open');
+
+      // Simulate multiple pong events (each triggers resetHeartbeat -> startHeartbeat)
+      fastMockWs.emit('pong');
+      fastMockWs.emit('pong');
+      fastMockWs.emit('pong');
+
+      // Wait for 2x the heartbeat interval — if intervals leaked, ping would be called
+      // more times than expected (multiple intervals firing)
+      const startCount = fastMockWs.ping.mock.calls.length;
+
+      setTimeout(() => {
+        // With a single interval at 50ms, after ~120ms we expect 1-2 pings max
+        const callsAfter = fastMockWs.ping.mock.calls.length - startCount;
+        expect(callsAfter).toBeLessThanOrEqual(3);
+        fastConnection.terminate();
+        done();
+      }, 120);
     });
   });
 
