@@ -52,7 +52,7 @@ export class HttpTransport implements Transport {
     this.config = {
       ...config,
       host: config.host || '0.0.0.0',
-      basePath: config.basePath || '/mcp',
+      basePath: ('/' + (config.basePath || '/mcp').replace(/^\/+/, '').replace(/\/+$/, '')),
       enableDnsRebindingProtection: config.enableDnsRebindingProtection ?? true,
       allowedHosts: config.allowedHosts || ['127.0.0.1', 'localhost'],
     };
@@ -324,7 +324,7 @@ export class HttpTransport implements Transport {
         this.transports.delete(sessionId);
 
       } catch (error) {
-        if (sessionId) {
+        if (sessionId && this.transports.has(sessionId)) {
           this.transports.delete(sessionId);
         }
         console.error('MCP DELETE request failed:', error);
