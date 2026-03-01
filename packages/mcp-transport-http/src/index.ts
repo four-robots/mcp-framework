@@ -379,7 +379,9 @@ export class HttpTransport implements Transport {
    */
   private getBaseUrl(req: Request): string {
     if (this.config.externalDomain) {
-      return `https://${this.config.externalDomain}`;
+      // Strip protocol prefix if caller already included it
+      const domain = this.config.externalDomain.replace(/^https?:\/\//, '');
+      return `https://${domain}`;
     }
     const host = req.get('host') || `${this.config.host}:${this.config.port}`;
     return `${req.protocol}://${host}`;

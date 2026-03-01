@@ -467,11 +467,6 @@ export class OIDCProvider extends OAuthProvider {
       };
     } catch (error) {
       console.error('Failed to exchange code for tokens:', error);
-      if ((error as any).error) {
-        // Convert OAuth error to regular Error
-        const errorMessage = String((error as any).error || 'OAuth error');
-        throw new Error(errorMessage);
-      }
       throw new Error(error instanceof Error ? error.message : 'Token exchange failed');
     }
   }
@@ -577,13 +572,13 @@ export class OIDCProvider extends OAuthProvider {
    */
   private async getSigningKey(kid: string): Promise<string> {
     let keys = await this.fetchJwks();
-    let key = keys.find(k => k.kid === kid && k.use !== 'enc');
+    let key = keys.find(k => k.kid === kid && (k.use === undefined || k.use === 'sig'));
 
     // If key not found, refetch in case keys were rotated
     if (!key) {
       this.jwksCache = null;
       keys = await this.fetchJwks();
-      key = keys.find(k => k.kid === kid && k.use !== 'enc');
+      key = keys.find(k => k.kid === kid && (k.use === undefined || k.use === 'sig'));
     }
 
     if (!key) {
@@ -755,11 +750,6 @@ export class OIDCProvider extends OAuthProvider {
       };
     } catch (error) {
       console.error('Failed to refresh token:', error);
-      if ((error as any).error) {
-        // Convert OAuth error to regular Error
-        const errorMessage = String((error as any).error || 'OAuth error');
-        throw new Error(errorMessage);
-      }
       throw new Error(error instanceof Error ? error.message : 'Token refresh failed');
     }
   }
@@ -942,11 +932,6 @@ export class OIDCProvider extends OAuthProvider {
       return data as ClientRegistrationResponse;
     } catch (error) {
       console.error('Failed to register client:', error);
-      if ((error as any).error) {
-        // Convert OAuth error to regular Error
-        const errorMessage = String((error as any).error || 'OAuth error');
-        throw new Error(errorMessage);
-      }
       throw new Error(error instanceof Error ? error.message : 'Client registration failed');
     }
   }
@@ -1063,7 +1048,7 @@ export class OIDCProvider extends OAuthProvider {
       const user = this.getUser(req);
       if (!user) {
         res.set('WWW-Authenticate', 'Bearer');
-        res.status(401).json(createOAuthError('unauthorized', 'Authentication required'));
+        res.status(401).json(createOAuthError('invalid_token', 'Authentication required'));
         return;
       }
       res.json({ user });

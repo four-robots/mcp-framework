@@ -46,7 +46,7 @@ describe('Auth Utilities', () => {
     it('should return null for empty Bearer token', () => {
       mockRequest.headers.authorization = 'Bearer ';
       const token = extractBearerToken(mockRequest);
-      expect(token).toBe('');
+      expect(token).toBeNull();
     });
 
     it('should handle Bearer token with spaces', () => {
@@ -109,7 +109,7 @@ describe('Auth Utilities', () => {
       expect(mockResponse.set).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer');
       expect(mockResponse.status).toHaveBeenCalledWith(401);
       expect(mockResponse.json).toHaveBeenCalledWith({
-        error: 'unauthorized',
+        error: 'invalid_token',
         error_description: 'Authentication required'
       });
       expect(mockNext).not.toHaveBeenCalled();

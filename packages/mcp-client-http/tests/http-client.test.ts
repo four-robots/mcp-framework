@@ -192,6 +192,16 @@ describe('HttpMCPClient', () => {
       expect(() => schema.parse([1, 2, 3])).toThrow(); // Should still be an object
     });
 
+    it('should clean up when disconnecting while not connected', async () => {
+      await client.disconnect();
+
+      // Disconnect again while already disconnected — should not throw
+      // and should still transition to Disconnected state
+      await client.disconnect();
+
+      expect(client.getConnectionState()).toBe(ConnectionState.Disconnected);
+    });
+
     it('should handle notification with undefined id field', async () => {
       const notification = {
         jsonrpc: '2.0' as const,

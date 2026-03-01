@@ -445,9 +445,9 @@ export class HttpRateLimitMiddleware {
       error: {
         code: -32009, // Custom MCP rate limit error code
         message: RateLimitUtils.formatErrorMessage(result),
-        data: { 
+        data: {
           retryAfter,
-          limit: result.totalRequests,
+          limit: configuredLimit ?? result.totalRequests,
           remaining: result.remaining,
           resetTime: result.resetTime
         }

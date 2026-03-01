@@ -196,7 +196,11 @@ async function createJiraServer() {
         const response = await fetch(url, options);
 
         if (!response.ok) {
-            throw new Error(`Jira API request failed: ${response.status} ${response.statusText}`);
+            const errorBody = await response.json().catch(() => ({}));
+            const errorMessages = (errorBody as any)?.errorMessages?.join('; ') || '';
+            const fieldErrors = Object.entries((errorBody as any)?.errors || {}).map(([k, v]) => `${k}: ${v}`).join('; ');
+            const details = [errorMessages, fieldErrors].filter(Boolean).join(' — ');
+            throw new Error(`Jira API request failed: ${response.status} ${response.statusText}${details ? ` (${details})` : ''}`);
         }
 
         return (await response.json()) as T;
@@ -259,7 +263,7 @@ async function createJiraServer() {
 
                 // Assignee filter
                 if (assignee) {
-                    if (assignee.toLowerCase() === "currentuser()" || assignee === "") {
+                    if (assignee.toLowerCase() === "currentuser()") {
                         jqlParts.push("assignee = currentUser()");
                     } else {
                         jqlParts.push(`assignee = "${escapeJql(assignee)}"`);

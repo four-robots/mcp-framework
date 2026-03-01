@@ -467,7 +467,8 @@ export function extractBearerToken(req: Request): string | null {
   if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
     return null;
   }
-  return authHeader.substring(7).trim();
+  const token = authHeader.substring(7).trim();
+  return token || null;
 }
 
 /**
@@ -484,7 +485,7 @@ export function createAuthMiddleware(provider: AuthProvider) {
         // Set WWW-Authenticate header as required by OAuth 2.1
         res.set('WWW-Authenticate', 'Bearer');
         const errorResponse = createOAuthError(
-          'unauthorized',
+          'invalid_token',
           'Authentication required'
         );
         res.status(401).json(errorResponse);

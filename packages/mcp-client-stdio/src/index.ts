@@ -100,6 +100,8 @@ export class StdioMCPClient extends BaseMCPClient {
     }
 
     if (!this.isConnected()) {
+      this.setConnectionState(ConnectionState.Disconnected);
+      this.cleanup();
       return;
     }
 
