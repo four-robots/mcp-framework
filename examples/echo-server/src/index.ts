@@ -95,7 +95,7 @@ async function createEchoServer() {
   return server;
 }
 
-async function main() {
+async function main(): Promise<MCPServer> {
   const server = await createEchoServer();
 
   // Determine transport based on environment
@@ -132,18 +132,25 @@ async function main() {
       console.error('[Echo Server] Started on stdio transport (debug mode)');
     }
   }
+
+  return server;
 }
 
-// Handle shutdown
-process.on('SIGINT', () => {
-  if (process.env.TRANSPORT === 'http') {
-    console.log('\n[Echo Server] Shutting down...');
-  }
-  process.exit(0);
-});
-
 // Run the server
-main().catch((error) => {
+let server: MCPServer | null = null;
+
+main().then(s => { server = s; }).catch((error) => {
   console.error('[Echo Server] Fatal error:', error);
   process.exit(1);
 });
+
+// Handle shutdown gracefully
+const shutdown = async () => {
+  console.error('\n[Echo Server] Shutting down...');
+  if (server) {
+    await server.stop();
+  }
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

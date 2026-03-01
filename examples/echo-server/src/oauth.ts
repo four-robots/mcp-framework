@@ -6,10 +6,11 @@ import { Providers } from '@tylercoles/mcp-auth-oidc';
  * Echo server example with OAuth authentication
  * Shows how simple it is to add OAuth with the framework
  */
-async function main() {
+async function main(): Promise<MCPServer> {
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const OIDC_URL = process.env.OIDC_URL || 'https://auth.example.com';
   const CLIENT_ID = process.env.CLIENT_ID || 'echo-server';
+  const APPLICATION_SLUG = process.env.APPLICATION_SLUG || 'echo-server';
   const CLIENT_SECRET = process.env.CLIENT_SECRET; // Optional for public clients
   const SESSION_SECRET = process.env.SESSION_SECRET;
 
@@ -94,7 +95,7 @@ async function main() {
   const transport = new HttpTransport({
     port: PORT,
     host: '127.0.0.1',
-    auth: Providers.Authentik(OIDC_URL, CLIENT_ID, CLIENT_ID, CLIENT_SECRET, {
+    auth: Providers.Authentik(OIDC_URL, APPLICATION_SLUG, CLIENT_ID, CLIENT_SECRET, {
       session: {
         secret: SESSION_SECRET,
         callbackUrl: `http://localhost:${PORT}/auth/callback`,
@@ -121,16 +122,25 @@ async function main() {
   console.log(`  - Login/callback flows`);
   console.log(`  - Session management`);
   console.log(`  - Token validation`);
+
+  return server;
 }
 
-// Handle shutdown gracefully
-process.on('SIGINT', () => {
-  console.log('\n[Echo Server] Shutting down...');
-  process.exit(0);
-});
-
 // Run the server
-main().catch((error) => {
+let server: MCPServer | null = null;
+
+main().then(s => { server = s; }).catch((error) => {
   console.error('[Echo Server] Fatal error:', error);
   process.exit(1);
 });
+
+// Handle shutdown gracefully
+const shutdown = async () => {
+  console.log('\n[Echo Server] Shutting down...');
+  if (server) {
+    await server.stop();
+  }
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

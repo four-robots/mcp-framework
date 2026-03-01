@@ -151,7 +151,9 @@ export class KanbanDatabase {
     if (this.dbType === 'postgres') {
       schemaPath = path.join(__dirname, 'schema.postgres.sql');
     } else if (this.dbType === 'mysql') {
-      schemaPath = path.join(__dirname, 'schema.mysql.sql');
+      const mysqlPath = path.join(__dirname, 'schema.mysql.sql');
+      // Fall back to SQLite schema if MySQL-specific schema doesn't exist
+      schemaPath = fs.existsSync(mysqlPath) ? mysqlPath : path.join(__dirname, 'schema.sql');
     } else {
       schemaPath = path.join(__dirname, 'schema.sql');
     }

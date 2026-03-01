@@ -28,6 +28,12 @@ export const registerCreateCardTool = (db: KanbanDatabase, wsServer: KanbanWebSo
         throw new ValidationError('Must specify either column_name or column_position');
       }
 
+      // Verify board exists
+      const board = await db.getBoardById(input.board_id);
+      if (!board) {
+        throw new NotFoundError('Board', input.board_id);
+      }
+
       // Get columns for the board
       const columns = await db.getColumnsByBoard(input.board_id);
       if (columns.length === 0) {

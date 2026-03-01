@@ -129,7 +129,7 @@ async function createMultiTransportServer() {
   return server;
 }
 
-async function main() {
+async function main(): Promise<MCPServer> {
   const server = await createMultiTransportServer();
   
   // Configure transports based on environment
@@ -179,16 +179,25 @@ async function main() {
   if (enableStdio) {
     console.error('[Multi-Transport] Ready for stdio communication');
   }
+
+  return server;
 }
 
-// Handle shutdown gracefully
-process.on('SIGINT', () => {
-  console.log('\n[Multi-Transport] Shutting down...');
-  process.exit(0);
-});
-
 // Run the server
-main().catch((error) => {
+let server: MCPServer | null = null;
+
+main().then(s => { server = s; }).catch((error) => {
   console.error('[Multi-Transport] Fatal error:', error);
   process.exit(1);
 });
+
+// Handle shutdown gracefully
+const shutdown = async () => {
+  console.error('\n[Multi-Transport] Shutting down...');
+  if (server) {
+    await server.stop();
+  }
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
