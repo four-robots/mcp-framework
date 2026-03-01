@@ -30,36 +30,36 @@ describe('Request Tracing System', () => {
     it('should generate unique correlation IDs', () => {
       const id1 = CorrelationManager.generateCorrelationId();
       const id2 = CorrelationManager.generateCorrelationId();
-      
-      expect(id1).toMatch(/^corr_\d+_[a-z0-9]+$/);
-      expect(id2).toMatch(/^corr_\d+_[a-z0-9]+$/);
+
+      expect(id1).toMatch(/^corr_\d+_[0-9a-f]+$/);
+      expect(id2).toMatch(/^corr_\d+_[0-9a-f]+$/);
       expect(id1).not.toBe(id2);
     });
 
     it('should generate unique request IDs', () => {
       const id1 = CorrelationManager.generateRequestId();
       const id2 = CorrelationManager.generateRequestId();
-      
-      expect(id1).toMatch(/^req_\d+_[a-z0-9]+$/);
-      expect(id2).toMatch(/^req_\d+_[a-z0-9]+$/);
+
+      expect(id1).toMatch(/^req_\d+_[0-9a-f]+$/);
+      expect(id2).toMatch(/^req_\d+_[0-9a-f]+$/);
       expect(id1).not.toBe(id2);
     });
 
     it('should generate unique trace IDs', () => {
       const id1 = CorrelationManager.generateTraceId();
       const id2 = CorrelationManager.generateTraceId();
-      
-      expect(id1).toBeDefined();
-      expect(id2).toBeDefined();
+
+      expect(id1).toMatch(/^trace_[0-9a-f]+$/);
+      expect(id2).toMatch(/^trace_[0-9a-f]+$/);
       expect(id1).not.toBe(id2);
     });
 
     it('should generate unique span IDs', () => {
       const id1 = CorrelationManager.generateSpanId();
       const id2 = CorrelationManager.generateSpanId();
-      
-      expect(id1).toMatch(/^span_\d+_[a-z0-9]+$/);
-      expect(id2).toMatch(/^span_\d+_[a-z0-9]+$/);
+
+      expect(id1).toMatch(/^span_[0-9a-f]+$/);
+      expect(id2).toMatch(/^span_[0-9a-f]+$/);
       expect(id1).not.toBe(id2);
     });
 
@@ -68,10 +68,10 @@ describe('Request Tracing System', () => {
       const enhanced = CorrelationManager.enhanceContext(context);
 
       expect(enhanced.user).toBe('test-user');
-      expect(enhanced.correlationId).toMatch(/^corr_\d+_[a-z0-9]+$/);
-      expect(enhanced.requestId).toMatch(/^req_\d+_[a-z0-9]+$/);
-      expect(enhanced.traceId).toBeDefined();
-      expect(enhanced.spanId).toMatch(/^span_\d+_[a-z0-9]+$/);
+      expect(enhanced.correlationId).toMatch(/^corr_\d+_[0-9a-f]+$/);
+      expect(enhanced.requestId).toMatch(/^req_\d+_[0-9a-f]+$/);
+      expect(enhanced.traceId).toMatch(/^trace_[0-9a-f]+$/);
+      expect(enhanced.spanId).toMatch(/^span_[0-9a-f]+$/);
       expect(enhanced.startTime).toBeTypeOf('number');
     });
 

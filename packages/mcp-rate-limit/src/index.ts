@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
 
 /**
  * Rate limiting result
@@ -89,7 +90,7 @@ export class MemoryRateLimiter implements RateLimiter {
     }
 
     const remaining = Math.max(0, limit - window.requests);
-    const retryAfter = allowed ? undefined : Math.ceil((window.resetTime - now) / 1000);
+    const retryAfter = allowed ? undefined : Math.max(1, Math.ceil((window.resetTime - now) / 1000));
 
     return {
       allowed,
@@ -312,7 +313,7 @@ export class RateLimitUtils {
    * Calculate retry-after header value in seconds
    */
   static calculateRetryAfter(resetTime: number): number {
-    return Math.ceil((resetTime - Date.now()) / 1000);
+    return Math.max(1, Math.ceil((resetTime - Date.now()) / 1000));
   }
 
   /**
@@ -719,7 +720,7 @@ export class WebSocketRateLimitManager {
     if (connection.remoteAddress) return connection.remoteAddress;
     // Assign a stable ID so the same connection always maps to the same rate limit bucket
     if (!connection.__rateLimitId) {
-      connection.__rateLimitId = `anon_${Math.random().toString(36).substring(2, 11)}`;
+      connection.__rateLimitId = `anon_${randomUUID()}`;
     }
     return connection.__rateLimitId;
   }
