@@ -633,7 +633,7 @@ export class OIDCProvider extends OAuthProvider {
 
       // Validate audience
       if (this.config.validateAudience) {
-        const audience = expectedAudience || this.config.expectedAudience || this.config.clientId;
+        const audience = expectedAudience ?? this.config.expectedAudience ?? this.config.clientId;
         if (audience) {
           verifyOptions.audience = typeof audience === 'string' ? audience : (audience as [string, ...string[]]);
         }
@@ -653,7 +653,7 @@ export class OIDCProvider extends OAuthProvider {
   private mapClaimsToUser(claims: any): User | null {
     const id = claims[this.config.idClaim];
     if (!id) {
-      console.error(`Missing required claim: ${this.config.idClaim}`);
+      console.error('Missing required ID claim in token');
       return null;
     }
     
@@ -671,7 +671,7 @@ export class OIDCProvider extends OAuthProvider {
       );
       
       if (!hasAllowedGroup) {
-        console.warn(`User ${id} not in allowed groups`);
+        console.warn('User not authorized: not in allowed groups');
         return null;
       }
     }
@@ -1047,6 +1047,8 @@ export class OIDCProvider extends OAuthProvider {
               res.status(500).json(createOAuthError('server_error', 'Failed to destroy session'));
               return;
             }
+            // Clear the session cookie so the browser doesn't send a stale session ID
+            res.clearCookie('connect.sid');
             res.json({ success: true });
           });
         } else {

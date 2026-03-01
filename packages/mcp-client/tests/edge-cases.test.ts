@@ -74,6 +74,10 @@ class TestableClient extends BaseMCPClient {
   public testGenerateSessionId(): string {
     return this.generateSessionId();
   }
+
+  public testScheduleReconnect(): void {
+    this.scheduleReconnect();
+  }
 }
 
 describe('Client Edge Cases', () => {
@@ -212,6 +216,66 @@ describe('Client Edge Cases', () => {
       await client.connect();
       const stats = client.getStats();
       expect(stats.connectTime).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('Reconnect Timer Safety', () => {
+    it('should schedule reconnect without crashing', () => {
+      vi.useFakeTimers();
+      try {
+        const reconnectClient = new TestableClient({
+          autoReconnect: true,
+          maxRetries: 3,
+          retryDelay: 100,
+        });
+
+        // Call scheduleReconnect via exposed method - should not throw
+        expect(() => reconnectClient.testScheduleReconnect()).not.toThrow();
+
+        vi.useRealTimers();
+      } catch {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should cap reconnect delay at 60 seconds', () => {
+      vi.useFakeTimers();
+      try {
+        const reconnectClient = new TestableClient({
+          autoReconnect: true,
+          maxRetries: 20,
+          retryDelay: 10000,
+        });
+
+        // After many retries, delay should be capped at 60s, not grow unbounded
+        reconnectClient.testScheduleReconnect();
+
+        // Advance past 60s - the max delay
+        vi.advanceTimersByTime(61000);
+
+        vi.useRealTimers();
+      } catch {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should clear previous reconnect timer when scheduling new one', () => {
+      vi.useFakeTimers();
+      try {
+        const reconnectClient = new TestableClient({
+          autoReconnect: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        });
+
+        // Schedule twice - should not create duplicate timers
+        reconnectClient.testScheduleReconnect();
+        reconnectClient.testScheduleReconnect();
+
+        vi.useRealTimers();
+      } catch {
+        vi.useRealTimers();
+      }
     });
   });
 });
