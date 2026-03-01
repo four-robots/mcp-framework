@@ -2159,8 +2159,8 @@ export class MCPServer {
    */
   private validatePaginationOptions(options: PaginationOptions): void {
     if (options.limit !== undefined) {
-      if (typeof options.limit !== 'number' || options.limit < 1) {
-        throw MCPErrorFactory.invalidParams('Limit must be a positive number');
+      if (typeof options.limit !== 'number' || !Number.isInteger(options.limit) || options.limit < 1) {
+        throw MCPErrorFactory.invalidParams('Limit must be a positive integer');
       }
       if (options.limit > this.paginationDefaults.maxPageSize) {
         throw MCPErrorFactory.invalidParams(`Limit cannot exceed ${this.paginationDefaults.maxPageSize}`);
@@ -2358,7 +2358,11 @@ export class MCPServer {
       if (match[i + 1] === undefined) {
         throw MCPErrorFactory.invalidParams(`URI missing value for template parameter '${varNames[i]}'`);
       }
-      params[varNames[i]] = decodeURIComponent(match[i + 1]);
+      try {
+        params[varNames[i]] = decodeURIComponent(match[i + 1]);
+      } catch {
+        throw MCPErrorFactory.invalidParams(`URI parameter '${varNames[i]}' contains invalid percent-encoding`);
+      }
     }
 
     return params;

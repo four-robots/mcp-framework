@@ -343,6 +343,16 @@ describe('Resource Template System', () => {
         { userId: '123', docId: 'test.txt' }
       );
     });
+
+    it('should reject URI with invalid percent-encoding in parameters', async () => {
+      const calls = mockSDKServer.registerResource.mock.calls;
+      const registeredHandler = calls[0][3];
+
+      // URI with malformed percent-encoding (%GG is not valid hex)
+      const badUri = new URL('file:///users/123/documents/bad%GGname');
+
+      await expect(registeredHandler(badUri)).rejects.toThrow('invalid percent-encoding');
+    });
   });
 
   describe('Parameter Validation', () => {

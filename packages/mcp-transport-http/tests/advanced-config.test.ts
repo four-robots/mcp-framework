@@ -220,7 +220,7 @@ describe('HttpTransport Advanced Configuration', () => {
       await transport.start(server);
 
       const app = transport.getApp()!;
-      
+
       // Test that MCP endpoint is at custom base path
       const response = await request(app)
         .post('/api/v1')
@@ -232,6 +232,21 @@ describe('HttpTransport Advanced Configuration', () => {
         });
 
       expect(response.status).toBe(200);
+    });
+
+    it('should normalize basePath with trailing slash', () => {
+      transport = new HttpTransport({ port: 0, basePath: '/api/v1/' });
+      expect((transport as any).config.basePath).toBe('/api/v1');
+    });
+
+    it('should normalize basePath without leading slash', () => {
+      transport = new HttpTransport({ port: 0, basePath: 'mcp' });
+      expect((transport as any).config.basePath).toBe('/mcp');
+    });
+
+    it('should default basePath to /mcp', () => {
+      transport = new HttpTransport({ port: 0 });
+      expect((transport as any).config.basePath).toBe('/mcp');
     });
   });
 

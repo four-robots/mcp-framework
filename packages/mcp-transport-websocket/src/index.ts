@@ -225,16 +225,17 @@ export class WebSocketConnection {
    * Send an error response
    */
   sendError(code: number, message: string, id?: string | number | null): Promise<void> {
-    // Per JSON-RPC 2.0 spec, id MUST be null when the id could not be detected
-    const errorResponse: JSONRPCMessage = {
-      jsonrpc: '2.0',
+    // Per JSON-RPC 2.0 spec, id MUST be null when the id could not be detected.
+    // The SDK type requires string | number, so we cast to satisfy both spec and types.
+    const errorResponse = {
+      jsonrpc: '2.0' as const,
       id: id ?? null,
       error: {
         code,
         message
       }
-    } as any;
-    return this.send(errorResponse);
+    };
+    return this.send(errorResponse as JSONRPCMessage);
   }
 
   /**

@@ -584,7 +584,14 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
 
         // Validate response outside the handler try-catch so validation
         // errors are not confused with handler crashes
-        if (response.action === ElicitationAction.Accept && response.values) {
+        if (response.action === ElicitationAction.Accept) {
+          if (!response.values) {
+            return {
+              id: request.id,
+              action: ElicitationAction.Cancel,
+              reason: 'Accept action requires values'
+            };
+          }
           const validationErrors = this.validateElicitationValues(request.fields, response.values);
           if (validationErrors.length > 0) {
             return {
