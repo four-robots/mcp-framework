@@ -210,6 +210,38 @@ export function isMCPError(error: any): error is MCPError {
 }
 
 /**
+ * Error indicating that a URL-based elicitation is required.
+ * Thrown by tool handlers when user interaction via a URL is needed
+ * (e.g., OAuth consent, CAPTCHA, external approval).
+ */
+export class UrlElicitationRequiredError extends MCPErrorClass {
+  readonly url: string;
+  readonly reason: string;
+
+  constructor(url: string, reason: string = 'User interaction required via URL') {
+    super(
+      MCPErrorCode.ServerError,
+      reason,
+      {
+        type: 'url_elicitation_required',
+        url,
+        reason,
+      }
+    );
+    this.name = 'UrlElicitationRequiredError';
+    this.url = url;
+    this.reason = reason;
+  }
+}
+
+/**
+ * Type guard for UrlElicitationRequiredError
+ */
+export function isUrlElicitationRequiredError(error: unknown): error is UrlElicitationRequiredError {
+  return error instanceof UrlElicitationRequiredError;
+}
+
+/**
  * Convert MCP error to JSON-RPC error response format
  */
 export function formatMCPError(error: MCPError | MCPErrorClass): {

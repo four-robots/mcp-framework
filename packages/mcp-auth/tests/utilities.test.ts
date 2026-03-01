@@ -64,17 +64,22 @@ describe('Auth Utilities', () => {
 
     beforeEach(() => {
       mockRequest = {
-        headers: {}
+        headers: {},
+        protocol: 'https',
+        get: vi.fn((name: string) => {
+          if (name === 'host') return 'example.com';
+          return undefined;
+        }),
       } as any;
-      
+
       mockResponse = {
         set: vi.fn(),
         status: vi.fn().mockReturnThis(),
         json: vi.fn()
       } as any;
-      
+
       mockNext = vi.fn();
-      
+
       mockProvider = {
         authenticate: vi.fn(),
         getUser: vi.fn()
@@ -106,7 +111,7 @@ describe('Auth Utilities', () => {
       await middleware(mockRequest, mockResponse, mockNext);
       
       expect(mockProvider.authenticate).toHaveBeenCalledWith(mockRequest);
-      expect(mockResponse.set).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer');
+      expect(mockResponse.set).toHaveBeenCalledWith('WWW-Authenticate', expect.stringContaining('Bearer'));
       expect(mockResponse.status).toHaveBeenCalledWith(401);
       expect(mockResponse.json).toHaveBeenCalledWith({
         error: 'invalid_token',

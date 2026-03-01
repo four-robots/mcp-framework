@@ -177,7 +177,10 @@ describe('Auth Edge Cases', () => {
       const middleware = createAuthMiddleware(provider);
       await middleware(mockRequest, mockResponse, mockNext);
 
-      expect(mockResponse.set).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer');
+      expect(mockResponse.set).toHaveBeenCalledWith(
+        'WWW-Authenticate',
+        expect.stringContaining('Bearer')
+      );
       expect(mockResponse.status).toHaveBeenCalledWith(401);
       expect(mockNext).not.toHaveBeenCalled();
     });

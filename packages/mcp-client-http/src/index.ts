@@ -24,6 +24,8 @@ import {
 export interface HttpClientConfig extends ClientConfig {
   url: string;
   headers?: Record<string, string>;
+  /** MCP Protocol Version to send in headers (default: '2025-06-18') */
+  protocolVersion?: string;
 }
 
 /**
@@ -39,9 +41,13 @@ export class HttpMCPClient extends BaseMCPClient {
   constructor(config: HttpClientConfig) {
     super(config);
     this.httpConfig = config;
+    const headers = {
+      'MCP-Protocol-Version': config.protocolVersion || '2025-06-18',
+      ...config.headers,
+    };
     this.transport = new StreamableHTTPClientTransport(
       new URL(config.url),
-      config.headers ? { requestInit: { headers: config.headers } } : undefined
+      { requestInit: { headers } }
     );
     this.client = new Client({
       name: "http-mcp-client",
@@ -62,9 +68,13 @@ export class HttpMCPClient extends BaseMCPClient {
     this.setConnectionState(ConnectionState.Connecting);
 
     if (this.needsFreshTransport) {
+      const headers = {
+        'MCP-Protocol-Version': this.httpConfig.protocolVersion || '2025-06-18',
+        ...this.httpConfig.headers,
+      };
       this.transport = new StreamableHTTPClientTransport(
         new URL(this.httpConfig.url),
-        this.httpConfig.headers ? { requestInit: { headers: this.httpConfig.headers } } : undefined
+        { requestInit: { headers } }
       );
       this.client = new Client({
         name: "http-mcp-client",

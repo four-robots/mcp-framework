@@ -76,3 +76,28 @@ export const createResourceLinkResult = (options: {
         ],
     };
 };
+
+/**
+ * Create an audio content result.
+ * Audio data should be base64-encoded.
+ */
+export const createAudioResult = (options: {
+    data: string;
+    mimeType: string;
+    message?: string;
+}): SdkToolResult => {
+    const content: any[] = [
+        {
+            type: 'audio' as any,
+            data: options.data,
+            mimeType: options.mimeType,
+        } as any,
+    ];
+    if (options.message) {
+        content.unshift({
+            type: 'text',
+            text: options.message,
+        });
+    }
+    return { content };
+};

@@ -800,15 +800,163 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
   }
 
   /**
+   * Convert JSON Schema requestedSchema to ElicitationField[] for backward compatibility
+   */
+  static schemaToFields(schema: ElicitationRequestedSchema): ElicitationField[] {
+    const fields: ElicitationField[] = [];
+    const required = new Set(schema.required || []);
+
+    for (const [name, prop] of Object.entries(schema.properties)) {
+      let fieldType: ElicitationFieldType;
+
+      if (prop.enum) {
+        fieldType = 'select';
+      } else if (prop.format === 'email') {
+        fieldType = 'email';
+      } else if (prop.format === 'uri') {
+        fieldType = 'url';
+      } else if (prop.format === 'date' || prop.format === 'date-time') {
+        fieldType = 'date';
+      } else if (prop.type === 'number' || prop.type === 'integer') {
+        fieldType = 'number';
+      } else if (prop.type === 'boolean') {
+        fieldType = 'boolean';
+      } else {
+        fieldType = 'text';
+      }
+
+      const field: ElicitationField = {
+        name,
+        type: fieldType,
+        label: prop.title || name,
+        description: prop.description,
+        required: required.has(name),
+        defaultValue: prop.default,
+        validation: {},
+      };
+
+      if (prop.minLength !== undefined) field.validation!.minLength = prop.minLength;
+      if (prop.maxLength !== undefined) field.validation!.maxLength = prop.maxLength;
+      if (prop.pattern !== undefined) field.validation!.pattern = prop.pattern;
+      if (prop.minimum !== undefined) field.validation!.min = prop.minimum;
+      if (prop.maximum !== undefined) field.validation!.max = prop.maximum;
+      if (prop.enum) {
+        field.validation!.options = prop.enum.map((value, i) => ({
+          value,
+          label: prop.enumNames?.[i] ?? String(value),
+        }));
+      }
+
+      // Remove empty validation object
+      if (Object.keys(field.validation!).length === 0) {
+        delete field.validation;
+      }
+
+      fields.push(field);
+    }
+
+    return fields;
+  }
+
+  /**
+   * Validate values against a JSON Schema (MCP elicitation restricted subset)
+   */
+  validateElicitationSchemaValues(
+    schema: ElicitationRequestedSchema,
+    values: Record<string, any>
+  ): ElicitationValidationError[] {
+    const errors: ElicitationValidationError[] = [];
+    const required = new Set(schema.required || []);
+
+    for (const reqField of required) {
+      if (values[reqField] === undefined || values[reqField] === null || values[reqField] === '') {
+        const prop = schema.properties[reqField];
+        errors.push({
+          field: reqField,
+          message: `${prop?.title || reqField} is required`,
+          code: 'REQUIRED',
+        });
+      }
+    }
+
+    for (const [name, prop] of Object.entries(schema.properties)) {
+      const value = values[name];
+      if (value === undefined || value === null || value === '') continue;
+
+      if (prop.type === 'string' && typeof value !== 'string') {
+        errors.push({ field: name, message: `${prop.title || name} must be a string`, code: 'INVALID_TYPE' });
+        continue;
+      }
+      if ((prop.type === 'number' || prop.type === 'integer') && typeof value !== 'number') {
+        errors.push({ field: name, message: `${prop.title || name} must be a number`, code: 'INVALID_TYPE' });
+        continue;
+      }
+      if (prop.type === 'boolean' && typeof value !== 'boolean') {
+        errors.push({ field: name, message: `${prop.title || name} must be a boolean`, code: 'INVALID_TYPE' });
+        continue;
+      }
+
+      if (typeof value === 'string') {
+        if (prop.minLength !== undefined && value.length < prop.minLength) {
+          errors.push({ field: name, message: `${prop.title || name} must be at least ${prop.minLength} characters`, code: 'MIN_LENGTH' });
+        }
+        if (prop.maxLength !== undefined && value.length > prop.maxLength) {
+          errors.push({ field: name, message: `${prop.title || name} must be at most ${prop.maxLength} characters`, code: 'MAX_LENGTH' });
+        }
+        if (prop.format === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          errors.push({ field: name, message: `${prop.title || name} must be a valid email`, code: 'INVALID_EMAIL' });
+        }
+        if (prop.format === 'uri') {
+          try { new URL(value); } catch {
+            errors.push({ field: name, message: `${prop.title || name} must be a valid URI`, code: 'INVALID_URL' });
+          }
+        }
+      }
+      if (typeof value === 'number') {
+        if (prop.minimum !== undefined && value < prop.minimum) {
+          errors.push({ field: name, message: `${prop.title || name} must be at least ${prop.minimum}`, code: 'MIN_VALUE' });
+        }
+        if (prop.maximum !== undefined && value > prop.maximum) {
+          errors.push({ field: name, message: `${prop.title || name} must be at most ${prop.maximum}`, code: 'MAX_VALUE' });
+        }
+      }
+      if (prop.enum && !prop.enum.includes(value)) {
+        errors.push({ field: name, message: `${prop.title || name} must be one of the allowed values`, code: 'INVALID_OPTION' });
+      }
+    }
+
+    return errors;
+  }
+
+  /**
    * Handle incoming elicitation requests from notifications
    */
   protected async handleElicitationNotification(notification: JSONRPCNotification): Promise<void> {
     if (notification.method === 'notifications/elicitation/request') {
-      const request = notification.params as unknown as ElicitationRequest;
-      
+      const raw = notification.params as any;
+
+      // Support JSON Schema format (MCP 2025-06-18) by converting to internal format
+      let request: ElicitationRequest;
+      if (raw.requestedSchema && !raw.fields) {
+        const fields = BaseMCPClient.schemaToFields(raw.requestedSchema);
+        request = {
+          id: raw.id || randomBytes(8).toString('hex'),
+          title: raw.message || raw.title || 'Information Request',
+          description: raw.description,
+          message: raw.message,
+          requestedSchema: raw.requestedSchema,
+          fields,
+          timeout: raw.timeout,
+          allowCancel: raw.allowCancel,
+          metadata: raw.metadata,
+        };
+      } else {
+        request = raw as ElicitationRequest;
+      }
+
       try {
         const response = await this.handleElicitationRequest(request);
-        
+
         // Send response back to server
         await this.sendMessage({
           jsonrpc: '2.0',
@@ -817,7 +965,7 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
         });
       } catch (error) {
         console.error('Failed to handle elicitation request:', error);
-        
+
         // Send error response
         await this.sendMessage({
           jsonrpc: '2.0',
@@ -998,7 +1146,7 @@ export interface SessionContext {
 export type ElicitationFieldType = 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'textarea' | 'password' | 'email' | 'url' | 'date' | 'time' | 'datetime';
 
 /**
- * Elicitation form field definition
+ * Elicitation form field definition (legacy format)
  */
 export interface ElicitationField {
   name: string;
@@ -1023,6 +1171,37 @@ export interface ElicitationField {
 }
 
 /**
+ * JSON Schema property definition for elicitation (MCP 2025-06-18 spec format).
+ * Restricted to flat objects with primitive properties only.
+ */
+export interface ElicitationSchemaProperty {
+  type: 'string' | 'number' | 'integer' | 'boolean';
+  title?: string;
+  description?: string;
+  default?: string | number | boolean;
+  // String constraints
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  format?: 'email' | 'uri' | 'date' | 'date-time';
+  // Number constraints
+  minimum?: number;
+  maximum?: number;
+  // Enum
+  enum?: (string | number | boolean)[];
+  enumNames?: string[];
+}
+
+/**
+ * JSON Schema for elicitation requests (MCP 2025-06-18 spec format)
+ */
+export interface ElicitationRequestedSchema {
+  type: 'object';
+  properties: Record<string, ElicitationSchemaProperty>;
+  required?: string[];
+}
+
+/**
  * Elicitation request from server to client
  */
 export interface ElicitationRequest {
@@ -1030,6 +1209,9 @@ export interface ElicitationRequest {
   title: string;
   description?: string;
   fields: ElicitationField[];
+  /** JSON Schema format from MCP 2025-06-18 spec (alternative to fields) */
+  message?: string;
+  requestedSchema?: ElicitationRequestedSchema;
   timeout?: number; // milliseconds
   allowCancel?: boolean;
   metadata?: Record<string, any>;
