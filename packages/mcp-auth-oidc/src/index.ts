@@ -1063,7 +1063,7 @@ export class OIDCProvider extends OAuthProvider {
       const user = this.getUser(req);
       if (!user) {
         res.set('WWW-Authenticate', 'Bearer');
-        res.status(401).json(createOAuthError('unauthorized', 'Authentication required'));
+        res.status(401).json(createOAuthError('invalid_token', 'Authentication required'));
         return;
       }
       res.json({ user });

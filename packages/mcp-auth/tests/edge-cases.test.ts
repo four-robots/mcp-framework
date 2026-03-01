@@ -38,9 +38,9 @@ describe('Auth Edge Cases', () => {
       expect(extractBearerToken(mockRequest)).toBe('mytoken');
     });
 
-    it('should return empty string for bearer with only spaces', () => {
+    it('should return null for bearer with only spaces', () => {
       mockRequest.headers.authorization = 'Bearer    ';
-      expect(extractBearerToken(mockRequest)).toBe('');
+      expect(extractBearerToken(mockRequest)).toBeNull();
     });
 
     it('should return null for undefined authorization', () => {
@@ -134,16 +134,16 @@ describe('Auth Edge Cases', () => {
   });
 
   describe('NoAuth Provider', () => {
-    it('should always authenticate successfully', async () => {
+    it('should return null from authenticate (no auth required)', async () => {
       const auth = new NoAuth();
       const user = await auth.authenticate(mockRequest);
-      expect(user).toBeDefined();
+      expect(user).toBeNull();
     });
 
-    it('should return a user from getUser', () => {
+    it('should return null from getUser', () => {
       const auth = new NoAuth();
       const user = auth.getUser(mockRequest);
-      expect(user).toBeDefined();
+      expect(user).toBeNull();
     });
   });
 

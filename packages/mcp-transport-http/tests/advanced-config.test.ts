@@ -354,6 +354,31 @@ describe('HttpTransport Advanced Configuration', () => {
       expect((transport as any).config.externalDomain).toBe('https://external.example.com');
     });
 
+    it('should strip protocol from externalDomain in getBaseUrl', async () => {
+      transport = new HttpTransport({
+        port: 0,
+        externalDomain: 'https://external.example.com'
+      });
+      await transport.start(server);
+
+      // getBaseUrl should not double the protocol
+      const mockReq = { protocol: 'http', get: () => 'localhost' } as any;
+      const baseUrl = (transport as any).getBaseUrl(mockReq);
+      expect(baseUrl).toBe('https://external.example.com');
+    });
+
+    it('should handle externalDomain without protocol prefix', async () => {
+      transport = new HttpTransport({
+        port: 0,
+        externalDomain: 'external.example.com'
+      });
+      await transport.start(server);
+
+      const mockReq = { protocol: 'http', get: () => 'localhost' } as any;
+      const baseUrl = (transport as any).getBaseUrl(mockReq);
+      expect(baseUrl).toBe('https://external.example.com');
+    });
+
     it('should handle configuration with host and port', async () => {
       const config: HttpConfig = {
         port: 8080,

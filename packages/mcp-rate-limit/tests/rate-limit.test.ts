@@ -266,7 +266,10 @@ describe('Rate Limiting System', () => {
         jsonrpc: '2.0',
         error: expect.objectContaining({
           code: -32009,
-          message: expect.stringContaining('Rate limit exceeded')
+          message: expect.stringContaining('Rate limit exceeded'),
+          data: expect.objectContaining({
+            limit: 2, // Should report the configured limit, not request count
+          })
         })
       }));
     });
