@@ -217,4 +217,66 @@ describe('HttpMCPClient', () => {
       expect(mockSDKClient.request).not.toHaveBeenCalled();
     });
   });
+
+  describe('Connection State Machine', () => {
+    it('should throw when connecting while already connected', async () => {
+      await client.connect();
+      await expect(client.connect()).rejects.toThrow('Client is already connected or connecting');
+    });
+
+    it('should throw when connecting during disconnect', async () => {
+      await client.connect();
+
+      // Make close() hang so disconnect stays in Disconnecting state
+      mockSDKClient.close.mockImplementation(() => new Promise(() => {}));
+
+      // Start disconnect (will not resolve because close hangs)
+      const disconnectPromise = client.disconnect();
+
+      // connect() should reject because state is Disconnecting
+      await expect(client.connect()).rejects.toThrow('Client is already connected or connecting');
+
+      // Clean up: resolve the hanging promise
+      mockSDKClient.close.mockResolvedValue(undefined);
+    });
+
+    it('should transition through Disconnecting state on disconnect', async () => {
+      await client.connect();
+
+      const states: ConnectionState[] = [];
+      client.subscribeToConnectionState((state) => states.push(state));
+
+      await client.disconnect();
+
+      expect(states).toContain(ConnectionState.Disconnecting);
+      expect(states).toContain(ConnectionState.Disconnected);
+      // Disconnecting must come before Disconnected
+      const disconnectingIdx = states.indexOf(ConnectionState.Disconnecting);
+      const disconnectedIdx = states.indexOf(ConnectionState.Disconnected);
+      expect(disconnectingIdx).toBeLessThan(disconnectedIdx);
+    });
+
+    it('should not trigger auto-reconnect on Disconnecting state', async () => {
+      const reconnectClient = new HttpMCPClient({
+        url: 'http://localhost:3000',
+        autoReconnect: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+      const reconnectMock = (Client as any).mock.results[(Client as any).mock.results.length - 1].value;
+
+      await reconnectClient.connect();
+
+      const states: ConnectionState[] = [];
+      reconnectClient.subscribeToConnectionState((state) => states.push(state));
+
+      await reconnectClient.disconnect();
+
+      // Should have Disconnecting and Disconnected, but no reconnect attempt
+      expect(states).toContain(ConnectionState.Disconnecting);
+      expect(states).toContain(ConnectionState.Disconnected);
+      // No Connecting state should appear (no reconnect)
+      expect(states).not.toContain(ConnectionState.Connecting);
+    });
+  });
 });

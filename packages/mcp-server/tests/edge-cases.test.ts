@@ -204,6 +204,74 @@ describe('MCPServer Edge Cases', () => {
       expect(ctx).toEqual({});
     });
   });
+
+  describe('Pagination Edge Cases', () => {
+    beforeEach(() => {
+      server = new MCPServer({
+        name: 'pagination-edge',
+        version: '1.0.0',
+        pagination: {
+          defaultPageSize: 2,
+          maxPageSize: 10,
+          cursorTTL: 100, // Very short TTL for testing
+        },
+      });
+
+      const handler = vi.fn();
+      for (let i = 0; i < 5; i++) {
+        server.registerTool(`tool_${i}`, { description: `Tool ${i}`, inputSchema: z.object({}) }, handler);
+      }
+    });
+
+    it('should reject expired cursors', async () => {
+      const page1 = server.getToolsPaginated({ limit: 2 });
+      expect(page1.nextCursor).toBeDefined();
+
+      // Wait for cursor to expire
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      expect(() => {
+        server.getToolsPaginated({ cursor: page1.nextCursor });
+      }).toThrow('Invalid or expired cursor');
+    });
+
+    it('should reject limit of 0', () => {
+      expect(() => {
+        server.getToolsPaginated({ limit: 0 });
+      }).toThrow('Limit must be a positive integer');
+    });
+
+    it('should reject limit exceeding maxPageSize', () => {
+      expect(() => {
+        server.getToolsPaginated({ limit: 100 });
+      }).toThrow('Limit cannot exceed');
+    });
+
+    it('should handle pagination of empty tool list', () => {
+      const emptyServer = new MCPServer({
+        name: 'empty-test',
+        version: '1.0.0',
+        pagination: { defaultPageSize: 10 },
+      });
+
+      const result = emptyServer.getToolsPaginated({});
+      expect(result.items).toEqual([]);
+      expect(result.nextCursor).toBeUndefined();
+    });
+  });
+
+  describe('Server Lifecycle', () => {
+    it('should handle stop without start', async () => {
+      await expect(server.stop()).resolves.not.toThrow();
+    });
+
+    it('should return capabilities even with no tools registered', () => {
+      const capabilities = server.getCapabilities();
+      expect(capabilities.tools).toEqual([]);
+      expect(capabilities.resources).toEqual([]);
+      expect(capabilities.prompts).toEqual([]);
+    });
+  });
 });
 
 describe('CorrelationManager', () => {
