@@ -147,12 +147,12 @@ describe('Auth Utilities', () => {
         get: vi.fn().mockReturnValue('example.com'),
         body: {}
       } as any;
-      
+
       mockResponse = {
         json: vi.fn(),
         status: vi.fn().mockReturnThis()
       } as any;
-      
+
       mockProvider = {
         authenticate: vi.fn(),
         getUser: vi.fn(),
@@ -174,6 +174,27 @@ describe('Auth Utilities', () => {
           authorization_servers: ['https://auth.example.com']
         } as ProtectedResourceMetadata)
       } as any;
+    });
+
+    it('should use localhost fallback when host header is absent', async () => {
+      const express = await import('express');
+      const app = express.default();
+      // Remove host header before routes process the request
+      app.use((req, _res, next) => {
+        req.headers.host = undefined as any;
+        next();
+      });
+      const router = createOAuthDiscoveryRoutes(mockProvider);
+      app.use('/', router);
+
+      const { default: supertest } = await import('supertest');
+      const response = await supertest(app)
+        .get('/.well-known/oauth-protected-resource');
+
+      expect(response.status).toBe(200);
+      expect(mockProvider.getProtectedResourceMetadata).toHaveBeenCalledWith(
+        expect.stringContaining('localhost')
+      );
     });
 
     it('should create discovery routes', () => {
@@ -298,7 +319,77 @@ describe('Auth Utilities', () => {
         error: 'invalid_client_metadata',
         error_description: 'Invalid metadata'
       });
-      
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should return 401 for registration errors with invalid_token error code', async () => {
+      const codedError = Object.assign(new Error('Token expired'), { error: 'invalid_token' });
+
+      mockProvider.supportsDynamicRegistration = vi.fn().mockReturnValue(true);
+      mockProvider.registerClient = vi.fn().mockRejectedValue(codedError);
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const express = await import('express');
+      const app = express.default();
+      app.use('/', createOAuthDiscoveryRoutes(mockProvider));
+
+      const { default: supertest } = await import('supertest');
+      const response = await supertest(app)
+        .post('/application/o/register/')
+        .send({ client_name: 'Test', redirect_uris: ['https://example.com/cb'] })
+        .set('Content-Type', 'application/json');
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('invalid_token');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should return 403 for registration errors with insufficient_scope error code', async () => {
+      const codedError = Object.assign(new Error('Forbidden'), { error: 'insufficient_scope' });
+
+      mockProvider.supportsDynamicRegistration = vi.fn().mockReturnValue(true);
+      mockProvider.registerClient = vi.fn().mockRejectedValue(codedError);
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const express = await import('express');
+      const app = express.default();
+      app.use('/', createOAuthDiscoveryRoutes(mockProvider));
+
+      const { default: supertest } = await import('supertest');
+      const response = await supertest(app)
+        .post('/application/o/register/')
+        .send({ client_name: 'Test', redirect_uris: ['https://example.com/cb'] })
+        .set('Content-Type', 'application/json');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('insufficient_scope');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should return 400 for registration errors without specific error code', async () => {
+      mockProvider.supportsDynamicRegistration = vi.fn().mockReturnValue(true);
+      mockProvider.registerClient = vi.fn().mockRejectedValue(new Error('Bad metadata'));
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const express = await import('express');
+      const app = express.default();
+      app.use('/', createOAuthDiscoveryRoutes(mockProvider));
+
+      const { default: supertest } = await import('supertest');
+      const response = await supertest(app)
+        .post('/application/o/register/')
+        .send({ client_name: 'Test', redirect_uris: ['https://example.com/cb'] })
+        .set('Content-Type', 'application/json');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('invalid_client_metadata');
+
       consoleSpy.mockRestore();
     });
   });

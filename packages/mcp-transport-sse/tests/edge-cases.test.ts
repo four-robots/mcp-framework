@@ -28,7 +28,7 @@ describe('SSETransport Edge Cases', () => {
   });
 
   describe('stop() state reset', () => {
-    it('should allow restart after stop by resetting internal state', async () => {
+    it('should clean up server state on stop while preserving routes', async () => {
       transport = new SSETransport({ port: 0, host: '127.0.0.1' });
 
       // Start, then stop
@@ -38,11 +38,11 @@ describe('SSETransport Edge Cases', () => {
 
       await transport.stop();
 
-      // After stop, routesSetup should be reset allowing a clean restart
-      // Verify internal state was cleaned up
+      // Server and mcpServer should be cleaned up
       expect((transport as any).server).toBeUndefined();
       expect((transport as any).mcpServer).toBeUndefined();
-      expect((transport as any).routesSetup).toBe(false);
+      // Routes stay registered on the Express app to avoid duplicates on restart
+      expect((transport as any).routesSetup).toBe(true);
     });
 
     it('should clear transports map on stop', async () => {
@@ -55,6 +55,44 @@ describe('SSETransport Edge Cases', () => {
 
       await transport.stop();
       expect(transport.getSessionCount()).toBe(0);
+    });
+  });
+
+  describe('restart after stop', () => {
+    it('should not duplicate routes on restart', async () => {
+      transport = new SSETransport({ port: 0, host: '127.0.0.1' });
+
+      // Start, stop, then restart
+      await transport.start(server);
+      await transport.stop();
+      await transport.start(server);
+
+      const baseUrl = transport.getBaseUrl();
+      const response = await fetch(`${baseUrl}health`);
+      expect(response.status).toBe(200);
+
+      const body = await response.json();
+      expect(body.status).toBe('healthy');
+    });
+
+    it('should return JSON error on connect failure', async () => {
+      const failingServer = {
+        ...server,
+        getSDKServer: vi.fn().mockReturnValue({
+          connect: vi.fn().mockRejectedValue(new Error('Connect failed')),
+        }),
+      };
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      transport = new SSETransport({ port: 0, host: '127.0.0.1' });
+      await transport.start(failingServer);
+
+      const baseUrl = transport.getBaseUrl();
+      const response = await fetch(`${baseUrl}sse`);
+      // Should return JSON error, not plain text
+      const body = await response.json();
+      expect(body.error).toBe('SSE connection failed');
+      consoleSpy.mockRestore();
     });
   });
 

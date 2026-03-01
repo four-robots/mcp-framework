@@ -551,15 +551,18 @@ export function createOAuthDiscoveryRoutes(provider: OAuthProvider): Router {
         let description = 'Failed to register client';
         
         if (error instanceof Error) {
-          if (error.message.includes('token') || error.message.includes('authentication')) {
+          // Use explicit error code properties if available, otherwise fall back to message heuristics.
+          // Check for coded error objects first (e.g., { error: 'invalid_token' }).
+          const coded = (error as any).error;
+          if (coded === 'invalid_token' || coded === 'unauthorized') {
             errorCode = 'invalid_token';
             statusCode = 401;
             description = 'Invalid or missing authentication token';
-          } else if (error.message.includes('permission') || error.message.includes('forbidden')) {
+          } else if (coded === 'insufficient_scope' || coded === 'forbidden') {
             errorCode = 'insufficient_scope';
             statusCode = 403;
             description = 'Insufficient permissions for client registration';
-          } else if (error.message.includes('metadata') || error.message.includes('invalid')) {
+          } else if (coded === 'invalid_client_metadata') {
             errorCode = 'invalid_client_metadata';
             description = error.message;
           }
@@ -595,7 +598,7 @@ function base64urlEncode(buffer: Buffer): string {
  */
 function getBaseUrl(req: Request): string {
   const protocol = req.protocol;
-  const host = req.get('host');
+  const host = req.get('host') || 'localhost';
   return `${protocol}://${host}`;
 }
 

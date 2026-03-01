@@ -87,10 +87,11 @@ export class SSETransport implements Transport {
     // SSE endpoint for server-to-client messages
     this.app.get(basePath + "sse", async (req: Request, res: Response) => {
       const sessionId = randomUUID();
+      let transport: SSEServerTransport | undefined;
 
       try {
         // Create SSE transport and connect to SDK server before exposing to clients
-        const transport = new SSEServerTransport(basePath + "messages", res);
+        transport = new SSEServerTransport(basePath + "messages", res);
 
         // Register close handler BEFORE connect so early disconnects are caught
         res.on("close", () => {
@@ -126,9 +127,14 @@ export class SSETransport implements Transport {
       } catch (error) {
         // Clean up transport on connect failure
         this.transports.delete(sessionId);
+        if (transport) {
+          transport.close().catch((err) => {
+            console.error(`Error closing SSE transport ${sessionId}:`, err);
+          });
+        }
         console.error("SSE connection failed:", error);
         if (!res.headersSent) {
-          res.status(500).send("SSE connection failed");
+          res.status(500).json({ error: "SSE connection failed" });
         } else {
           // Headers already sent (SSE stream started), end the response
           res.end();
@@ -243,7 +249,6 @@ export class SSETransport implements Transport {
       this.server = undefined;
     }
 
-    this.routesSetup = false;
     this.mcpServer = undefined;
   }
 
