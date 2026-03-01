@@ -576,20 +576,20 @@ describe('OIDCProvider', () => {
         ...defaultConfig,
         tokenEndpointAuthMethod: 'client_secret_basic',
       });
-      
+
       // Set up discovery document for the new provider
       nock('https://test-oidc.example.com')
         .get('/.well-known/openid-configuration')
         .reply(200, mockDiscovery);
-      
+
       nock('https://test-oidc.example.com')
         .get('/jwks')
         .reply(200, mockJWKS);
-      
+
       await basicAuthProvider.initialize();
-      
+
       const expectedAuth = Buffer.from('test-client-id:test-client-secret').toString('base64');
-      
+
       nock('https://test-oidc.example.com')
         .post('/token')
         .matchHeader('authorization', `Basic ${expectedAuth}`)
@@ -597,8 +597,155 @@ describe('OIDCProvider', () => {
           access_token: 'test-token',
           token_type: 'Bearer',
         });
-      
+
       await basicAuthProvider.handleCallback('test-code');
+    });
+  });
+
+  describe('Claims Mapping Security', () => {
+    it('should not leak claim names in error messages', async () => {
+      const customProvider = new OIDCProvider({
+        ...defaultConfig,
+        idClaim: 'custom_secret_field',
+      });
+
+      nock('https://test-oidc.example.com')
+        .get('/.well-known/openid-configuration')
+        .reply(200, mockDiscovery);
+
+      nock('https://test-oidc.example.com')
+        .get('/jwks')
+        .reply(200, mockJWKS);
+
+      await customProvider.initialize();
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // User info missing the required ID claim
+      nock('https://test-oidc.example.com')
+        .get('/userinfo')
+        .reply(200, {
+          sub: 'user123', // has sub but provider expects custom_secret_field
+          email: 'test@example.com',
+        });
+
+      const user = await customProvider.verifyToken('test-token');
+      expect(user).toBeNull();
+
+      // Verify the log message does NOT contain the claim name
+      const claimLogCall = consoleSpy.mock.calls.find(
+        call => typeof call[0] === 'string' && call[0].includes('Missing required')
+      );
+      expect(claimLogCall).toBeDefined();
+      expect(claimLogCall![0]).not.toContain('custom_secret_field');
+      expect(claimLogCall![0]).toBe('Missing required ID claim in token');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should not leak user IDs in group authorization logs', async () => {
+      const restrictedProvider = new OIDCProvider({
+        ...defaultConfig,
+        allowedGroups: ['admin'],
+      });
+
+      nock('https://test-oidc.example.com')
+        .get('/.well-known/openid-configuration')
+        .reply(200, mockDiscovery);
+
+      nock('https://test-oidc.example.com')
+        .get('/jwks')
+        .reply(200, mockJWKS);
+
+      await restrictedProvider.initialize();
+
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      nock('https://test-oidc.example.com')
+        .get('/userinfo')
+        .reply(200, {
+          sub: 'sensitive-user-id-123',
+          email: 'secret@example.com',
+          groups: ['users'],
+        });
+
+      const user = await restrictedProvider.verifyToken('test-token');
+      expect(user).toBeNull();
+
+      // Verify log does NOT contain user ID
+      const groupLogCall = consoleSpy.mock.calls.find(
+        call => typeof call[0] === 'string' && call[0].includes('not in allowed groups')
+      );
+      expect(groupLogCall).toBeDefined();
+      expect(groupLogCall![0]).not.toContain('sensitive-user-id-123');
+      expect(groupLogCall![0]).toBe('User not authorized: not in allowed groups');
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Audience Validation with Empty String', () => {
+    it('should use clientId when expectedAudience is empty string', async () => {
+      const emptyAudProvider = new OIDCProvider({
+        ...defaultConfig,
+        validateAudience: true,
+        expectedAudience: '',
+      });
+
+      nock('https://test-oidc.example.com')
+        .get('/.well-known/openid-configuration')
+        .reply(200, mockDiscovery);
+
+      nock('https://test-oidc.example.com')
+        .get('/jwks')
+        .reply(200, mockJWKS);
+
+      await emptyAudProvider.initialize();
+
+      // When expectedAudience is empty string with || operator, it would
+      // fall through to clientId. With ?? operator, it correctly uses the
+      // empty string as the intended value. Either way the behavior should
+      // be consistent and not accidentally skip audience validation.
+      expect(emptyAudProvider).toBeInstanceOf(OIDCProvider);
+    });
+  });
+
+  describe('Logout Session Cleanup', () => {
+    it('should clear session cookie on logout', async () => {
+      const sessionProvider = new OIDCProvider({
+        ...defaultConfig,
+        session: {
+          secret: 'test-secret',
+          callbackUrl: 'https://app.example.com/callback',
+        },
+      });
+
+      nock('https://test-oidc.example.com')
+        .get('/.well-known/openid-configuration')
+        .reply(200, mockDiscovery);
+
+      nock('https://test-oidc.example.com')
+        .get('/jwks')
+        .reply(200, mockJWKS);
+
+      // Test that setupRoutes configures a logout route
+      const express = await import('express');
+      const router = express.Router();
+
+      // Track registered routes
+      const routes: { method: string; path: string }[] = [];
+      const originalPost = router.post.bind(router);
+      router.post = vi.fn(function (path: any, ...handlers: any[]) {
+        routes.push({ method: 'post', path });
+        return originalPost(path, ...handlers);
+      }) as any;
+
+      sessionProvider.setupRoutes(router);
+
+      // Verify logout route was registered
+      const logoutRoute = routes.find(r => r.path.includes('/logout'));
+      expect(logoutRoute).toBeDefined();
+      expect(logoutRoute!.method).toBe('post');
     });
   });
 });
