@@ -53,7 +53,8 @@ export class HttpMCPClient extends BaseMCPClient {
    * Connect to the MCP server
    */
   async connect(): Promise<void> {
-    if (this.isConnected() || this.getConnectionState() === ConnectionState.Connecting) {
+    const state = this.getConnectionState();
+    if (this.isConnected() || state === ConnectionState.Connecting || state === ConnectionState.Disconnecting) {
       throw new Error("Client is already connected or connecting");
     }
 
@@ -98,6 +99,8 @@ export class HttpMCPClient extends BaseMCPClient {
       this.cleanup();
       return;
     }
+
+    this.setConnectionState(ConnectionState.Disconnecting);
 
     try {
       await this.client.close();

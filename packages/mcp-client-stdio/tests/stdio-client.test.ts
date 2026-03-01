@@ -158,12 +158,64 @@ describe('StdioMCPClient', () => {
 
       // Get the schema that was passed
       const [_, schema] = mockSDKClient.request.mock.calls[0];
-      
+
       // Test that it accepts various response structures
       expect(() => schema.parse({})).not.toThrow();
       expect(() => schema.parse({ foo: 'bar' })).not.toThrow();
       expect(() => schema.parse({ nested: { data: true } })).not.toThrow();
       expect(() => schema.parse([1, 2, 3])).toThrow(); // Should still be an object
+    });
+  });
+
+  describe('Connection State Machine', () => {
+    it('should throw when connecting while already connected', async () => {
+      await client.connect();
+      await expect(client.connect()).rejects.toThrow('Client is already connected or connecting');
+    });
+
+    it('should throw when connecting during disconnect', async () => {
+      await client.connect();
+
+      // Make close() hang so disconnect stays in Disconnecting state
+      mockSDKClient.close.mockImplementation(() => new Promise(() => {}));
+
+      // Start disconnect (will not resolve because close hangs)
+      const disconnectPromise = client.disconnect();
+
+      // connect() should reject because state is Disconnecting
+      await expect(client.connect()).rejects.toThrow('Client is already connected or connecting');
+
+      // Clean up
+      mockSDKClient.close.mockResolvedValue(undefined);
+    });
+
+    it('should transition through Disconnecting state on disconnect', async () => {
+      await client.connect();
+
+      const states: ConnectionState[] = [];
+      client.subscribeToConnectionState((state) => states.push(state));
+
+      await client.disconnect();
+
+      expect(states).toContain(ConnectionState.Disconnecting);
+      expect(states).toContain(ConnectionState.Disconnected);
+      const disconnectingIdx = states.indexOf(ConnectionState.Disconnecting);
+      const disconnectedIdx = states.indexOf(ConnectionState.Disconnected);
+      expect(disconnectingIdx).toBeLessThan(disconnectedIdx);
+    });
+
+    it('should handle disconnect when not connected', async () => {
+      // Disconnect without connecting first should not throw
+      await client.disconnect();
+      expect(client.getConnectionState()).toBe(ConnectionState.Disconnected);
+    });
+
+    it('should handle double disconnect', async () => {
+      await client.connect();
+      await client.disconnect();
+      // Second disconnect should not throw
+      await client.disconnect();
+      expect(client.getConnectionState()).toBe(ConnectionState.Disconnected);
     });
   });
 });
