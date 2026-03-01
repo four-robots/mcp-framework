@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
+import { randomUUID } from 'crypto';
 import { KanbanDatabase } from './database';
 
 interface WebSocketMessage {
@@ -378,29 +379,41 @@ export class KanbanWebSocketServer {
     const message = JSON.stringify({ type, payload });
     this.clients.forEach(client => {
       if (client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(message);
+        try {
+          client.ws.send(message);
+        } catch (error) {
+          console.error(`Error broadcasting to client ${client.id}:`, error);
+        }
       }
     });
   }
 
   broadcastToBoardClients(boardId: number, type: string, payload: any): void {
     const message = JSON.stringify({ type, payload });
-    console.log(`Broadcasting to board ${boardId} clients:`, type, 'Clients with this board:', 
-      Array.from(this.clients.values()).filter(c => c.boardId === boardId).length);
-    
     this.clients.forEach(client => {
       if (client.boardId === boardId && client.ws.readyState === WebSocket.OPEN) {
-        console.log(`Sending ${type} to client ${client.id}`);
-        client.ws.send(message);
+        try {
+          client.ws.send(message);
+        } catch (error) {
+          console.error(`Error broadcasting to client ${client.id}:`, error);
+        }
       }
     });
   }
 
   private generateClientId(): string {
-    return Math.random().toString(36).substring(2, 15);
+    return randomUUID();
   }
 
   close(): void {
+    for (const client of this.clients.values()) {
+      try {
+        client.ws.close(1000, 'Server shutting down');
+      } catch {
+        // Ignore errors closing individual clients
+      }
+    }
+    this.clients.clear();
     this.wss.close();
   }
 }

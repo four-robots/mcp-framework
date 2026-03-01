@@ -94,7 +94,13 @@ export class SSETransport implements Transport {
 
         // Register close handler BEFORE connect so early disconnects are caught
         res.on("close", () => {
+          const closedTransport = this.transports.get(sessionId);
           this.transports.delete(sessionId);
+          if (closedTransport) {
+            closedTransport.close().catch((err) => {
+              console.error(`Error closing SSE transport ${sessionId}:`, err);
+            });
+          }
         });
 
         if (!this.mcpServer) {
@@ -233,6 +239,9 @@ export class SSETransport implements Transport {
       });
       this.server = undefined;
     }
+
+    this.routesSetup = false;
+    this.mcpServer = undefined;
   }
 
   /**

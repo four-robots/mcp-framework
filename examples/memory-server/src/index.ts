@@ -34,7 +34,7 @@ class Application {
       host: config.host,
       basePath: '/mcp',
       externalDomain: config.externalDomain,
-      auth: Providers.Authentik(config.auth.oidcUrl, 'claude-ai-mcp', 'claude-ai-mcp', config.auth.clientSecret, {
+      auth: Providers.Authentik(config.auth.oidcUrl, config.auth.clientId, config.auth.clientId, config.auth.clientSecret, {
         allowedGroups: config.auth.allowedGroups,
         session: {
           secret: config.sessionSecret,
