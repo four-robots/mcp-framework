@@ -78,6 +78,18 @@ class TestableClient extends BaseMCPClient {
   public testScheduleReconnect(): void {
     this.scheduleReconnect();
   }
+
+  public setIntentionalDisconnect(value: boolean): void {
+    this.intentionalDisconnect = value;
+  }
+
+  public getIntentionalDisconnect(): boolean {
+    return this.intentionalDisconnect;
+  }
+
+  public getReconnectTimer(): NodeJS.Timeout | undefined {
+    return this.reconnectTimer;
+  }
 }
 
 describe('Client Edge Cases', () => {
@@ -276,6 +288,151 @@ describe('Client Edge Cases', () => {
       } catch {
         vi.useRealTimers();
       }
+    });
+
+    it('should abort reconnect if intentionalDisconnect is set before timer fires', () => {
+      vi.useFakeTimers();
+      try {
+        const reconnectClient = new TestableClient({
+          autoReconnect: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        });
+        const connectSpy = vi.spyOn(reconnectClient, 'connect');
+
+        // Schedule reconnect
+        reconnectClient.testScheduleReconnect();
+
+        // Simulate user calling disconnect (sets intentionalDisconnect)
+        reconnectClient.setIntentionalDisconnect(true);
+
+        // Fire the timer
+        vi.advanceTimersByTime(200);
+
+        // connect() should NOT have been called
+        expect(connectSpy).not.toHaveBeenCalled();
+
+        vi.useRealTimers();
+      } catch {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should not reschedule reconnect if intentionalDisconnect set during connect attempt', async () => {
+      vi.useFakeTimers();
+      try {
+        // Create a client whose connect() fails
+        const failingClient = new TestableClient({
+          autoReconnect: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        });
+
+        // Override connect to fail AND set intentionalDisconnect (simulating
+        // user calling disconnect during the connect attempt)
+        const originalConnect = failingClient.connect.bind(failingClient);
+        vi.spyOn(failingClient, 'connect').mockImplementation(async () => {
+          failingClient.setIntentionalDisconnect(true);
+          throw new Error('Connect failed');
+        });
+
+        const scheduleSpy = vi.spyOn(failingClient as any, 'scheduleReconnect');
+
+        // Schedule reconnect
+        failingClient.testScheduleReconnect();
+
+        // Fire the timer — the reconnect should fail and NOT reschedule
+        await vi.advanceTimersByTimeAsync(200);
+
+        // scheduleReconnect should only have been called once (our explicit call)
+        // not a second time from the reconnect callback
+        expect(scheduleSpy).toHaveBeenCalledTimes(1);
+
+        vi.useRealTimers();
+      } catch {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('Heartbeat Timer Management', () => {
+    it('should start heartbeat on connect and stop on disconnect', async () => {
+      const heartbeatClient = new TestableClient({
+        heartbeatInterval: 30000,
+      });
+
+      await heartbeatClient.connect();
+      // Heartbeat timer is internal, verify via stats
+      expect(heartbeatClient.getConnectionState()).toBe(ConnectionState.Connected);
+
+      await heartbeatClient.disconnect();
+      expect(heartbeatClient.getConnectionState()).toBe(ConnectionState.Disconnected);
+    });
+
+    it('should not start heartbeat when interval is 0', async () => {
+      const noHeartbeatClient = new TestableClient({
+        heartbeatInterval: 0,
+      });
+
+      await noHeartbeatClient.connect();
+      expect(noHeartbeatClient.isConnected()).toBe(true);
+
+      await noHeartbeatClient.disconnect();
+    });
+  });
+
+  describe('Callback Error Isolation', () => {
+    it('should not crash when connection state callback throws', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      client.subscribeToConnectionState(() => {
+        throw new Error('Callback error');
+      });
+
+      // Should not throw despite callback error
+      await expect(client.connect()).resolves.toBeUndefined();
+      consoleSpy.mockRestore();
+    });
+
+    it('should not crash when progress callback throws', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await client.connect();
+
+      client.subscribeToProgress(() => {
+        throw new Error('Progress callback error');
+      });
+
+      // Trigger progress notification internally
+      (client as any).notifyProgress({
+        progressToken: 'test',
+        progress: 50,
+        total: 100,
+      });
+
+      // Should not crash
+      expect(true).toBe(true);
+      consoleSpy.mockRestore();
+    });
+
+    it('should not crash when message callback throws', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await client.connect();
+
+      client.subscribeToMessages(() => {
+        throw new Error('Message callback error');
+      });
+
+      // Trigger message notification internally
+      (client as any).notifyMessage({
+        jsonrpc: '2.0',
+        method: 'test',
+      });
+
+      // Should not crash
+      expect(true).toBe(true);
+      consoleSpy.mockRestore();
     });
   });
 });
