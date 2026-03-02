@@ -551,16 +551,61 @@ export interface CompletionConfig {
 }
 
 /**
+ * Content types for sampling messages
+ */
+export interface SamplingTextContent {
+  type: 'text';
+  text: string;
+  annotations?: Record<string, any>;
+}
+
+export interface SamplingImageContent {
+  type: 'image';
+  data: string; // Base64 encoded
+  mimeType: string;
+  annotations?: Record<string, any>;
+}
+
+export interface SamplingAudioContent {
+  type: 'audio';
+  data: string; // Base64 encoded
+  mimeType: string;
+  annotations?: Record<string, any>;
+}
+
+/**
+ * Tool use content in sampling messages (when model invokes a tool)
+ */
+export interface SamplingToolUseContent {
+  type: 'tool_use';
+  toolUseId: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
+/**
+ * Tool result content in sampling messages (result returned to model)
+ */
+export interface SamplingToolResultContent {
+  type: 'tool_result';
+  toolUseId: string;
+  content: string | Array<SamplingTextContent | SamplingImageContent>;
+  isError?: boolean;
+}
+
+export type SamplingContentBlock =
+  | SamplingTextContent
+  | SamplingImageContent
+  | SamplingAudioContent
+  | SamplingToolUseContent
+  | SamplingToolResultContent;
+
+/**
  * Sampling message interface
  */
 export interface SamplingMessage {
   role: 'user' | 'assistant' | 'system';
-  content: {
-    type: 'text' | 'image';
-    text?: string;
-    data?: string; // Base64 encoded data for images
-    mimeType?: string;
-  };
+  content: SamplingContentBlock;
   name?: string;
   annotations?: Record<string, any>;
 }
@@ -569,11 +614,32 @@ export interface SamplingMessage {
  * Model preferences for sampling
  */
 export interface ModelPreferences {
-  hints?: string[];
+  hints?: Array<{ name?: string }>;
   costPriority?: number; // 0-1, where 0 is lowest cost, 1 is highest quality
   speedPriority?: number; // 0-1, where 0 is slowest, 1 is fastest
   intelligencePriority?: number; // 0-1, where 0 is simplest, 1 is most intelligent
 }
+
+/**
+ * Tool definition for sampling requests
+ */
+export interface SamplingToolDefinition {
+  name: string;
+  description?: string;
+  inputSchema: {
+    type: 'object';
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+}
+
+/**
+ * Tool choice configuration for sampling
+ */
+export type SamplingToolChoice =
+  | { type: 'auto' }
+  | { type: 'none' }
+  | { type: 'tool'; name: string };
 
 /**
  * Sampling request interface
@@ -582,9 +648,12 @@ export interface SamplingRequest {
   messages: SamplingMessage[];
   modelPreferences?: ModelPreferences;
   systemPrompt?: string;
-  includeContext?: boolean;
+  includeContext?: 'none' | 'thisServer' | 'allServers';
   maxTokens?: number;
   temperature?: number;
+  stopSequences?: string[];
+  tools?: SamplingToolDefinition[];
+  toolChoice?: SamplingToolChoice;
   metadata?: Record<string, any>;
 }
 
@@ -595,10 +664,7 @@ export interface SamplingResponse {
   model?: string;
   stopReason?: 'endTurn' | 'stopSequence' | 'maxTokens' | 'toolUse';
   role: 'assistant';
-  content: {
-    type: 'text';
-    text: string;
-  };
+  content: SamplingContentBlock;
   usage?: {
     inputTokens?: number;
     outputTokens?: number;
@@ -623,6 +689,7 @@ export interface SamplingConfig {
   supportedModels?: string[];
   maxTokensLimit?: number;
   temperatureRange?: { min: number; max: number };
+  supportedToolCalling?: boolean;
   metadata?: Record<string, any>;
 }
 
@@ -1442,7 +1509,7 @@ export class MCPServer {
     }
 
     // Validate tool name format per MCP 2025-11-25 (SHOULD be 1-128 chars, A-Z a-z 0-9 _ - .)
-    if (name.length > 128 || !/^[A-Za-z0-9_.\-]+$/.test(name)) {
+    if (name.length > 128 || !/^[A-Za-z0-9_.-]+$/.test(name)) {
       console.warn(
         `Warning: Tool name '${name}' does not follow MCP naming convention ` +
         `(1-128 chars, only A-Z, a-z, 0-9, _, -, .)`
@@ -2869,16 +2936,41 @@ export class MCPServer {
         throw MCPErrorFactory.invalidParams(`Invalid content at message ${index}: must be an object`);
       }
 
-      if (!message.content.type || !['text', 'image', 'audio', 'resource'].includes(message.content.type)) {
-        throw MCPErrorFactory.invalidParams(`Invalid content type at message ${index}: must be text, image, audio, or resource`);
+      const validContentTypes = ['text', 'image', 'audio', 'resource', 'tool_use', 'tool_result'];
+      if (!message.content.type || !validContentTypes.includes(message.content.type)) {
+        throw MCPErrorFactory.invalidParams(`Invalid content type at message ${index}: must be one of ${validContentTypes.join(', ')}`);
       }
 
-      if (message.content.type === 'text' && !message.content.text) {
+      if (message.content.type === 'text' && !(message.content as SamplingTextContent).text) {
         throw MCPErrorFactory.invalidParams(`Text message at index ${index} must have text content`);
       }
 
-      if (message.content.type === 'image' && (!message.content.data || !message.content.mimeType)) {
-        throw MCPErrorFactory.invalidParams(`Image message at index ${index} must have data and mimeType`);
+      if (message.content.type === 'image') {
+        const img = message.content as SamplingImageContent;
+        if (!img.data || !img.mimeType) {
+          throw MCPErrorFactory.invalidParams(`Image message at index ${index} must have data and mimeType`);
+        }
+      }
+
+      if (message.content.type === 'audio') {
+        const audio = message.content as SamplingAudioContent;
+        if (!audio.data || !audio.mimeType) {
+          throw MCPErrorFactory.invalidParams(`Audio message at index ${index} must have data and mimeType`);
+        }
+      }
+
+      if (message.content.type === 'tool_use') {
+        const toolUse = message.content as SamplingToolUseContent;
+        if (!toolUse.toolUseId || !toolUse.name) {
+          throw MCPErrorFactory.invalidParams(`Tool use message at index ${index} must have toolUseId and name`);
+        }
+      }
+
+      if (message.content.type === 'tool_result') {
+        const toolResult = message.content as SamplingToolResultContent;
+        if (!toolResult.toolUseId) {
+          throw MCPErrorFactory.invalidParams(`Tool result message at index ${index} must have toolUseId`);
+        }
       }
     }
 
@@ -2931,7 +3023,7 @@ export class MCPServer {
     const processed = { ...request };
 
     // Add context if enabled and available
-    if (this.samplingConfig?.includeContext !== false && request.includeContext !== false) {
+    if (this.samplingConfig?.includeContext !== false && request.includeContext !== 'none') {
       // Add server context to the request
       if (!processed.metadata) {
         processed.metadata = {};
@@ -2982,11 +3074,12 @@ export class MCPServer {
       throw MCPErrorFactory.internalError('Sampling response must have content object');
     }
 
-    if (!response.content.type || !['text', 'image', 'audio', 'resource'].includes(response.content.type)) {
+    const validResponseTypes = ['text', 'image', 'audio', 'resource', 'tool_use', 'tool_result'];
+    if (!response.content.type || !validResponseTypes.includes(response.content.type)) {
       throw MCPErrorFactory.internalError('Sampling response content must have a valid type');
     }
 
-    if (response.content.type === 'text' && typeof response.content.text !== 'string') {
+    if (response.content.type === 'text' && typeof (response.content as any).text !== 'string') {
       throw MCPErrorFactory.internalError('Sampling response text content must have string text');
     }
 
@@ -3166,6 +3259,53 @@ export class MCPServer {
     }
   }
 
+  /**
+   * Send a URL-mode elicitation request to the connected client.
+   * The client should open the URL for the user to complete an action
+   * (e.g., OAuth consent, external approval).
+   *
+   * @param url - The URL the user should visit
+   * @param message - Human-readable description of why the URL visit is needed
+   * @returns The elicitation result with action
+   */
+  async sendUrlElicitationRequest(
+    url: string,
+    message: string,
+  ): Promise<ElicitResult> {
+    if (!this.sdkServer.server) {
+      throw MCPErrorFactory.invalidRequest('Server is not connected');
+    }
+
+    try {
+      const result = await (this.sdkServer.server as any).request(
+        {
+          method: 'elicitation/create',
+          params: {
+            message,
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                _url: {
+                  type: 'string',
+                  format: 'uri',
+                  default: url,
+                  title: 'URL',
+                  description: `Please visit: ${url}`,
+                },
+              },
+            },
+          },
+        },
+        ElicitResultSchema
+      );
+      return result;
+    } catch (error) {
+      throw MCPErrorFactory.internalError(
+        `URL elicitation request failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
   // ====================================================================
   // Request Tracing & Performance
   // ====================================================================
@@ -3244,7 +3384,9 @@ export {
   MCPErrorClass,
   MCPErrorCode,
   isMCPError,
-  formatMCPError
+  formatMCPError,
+  UrlElicitationRequiredError,
+  isUrlElicitationRequiredError,
 } from "./errors.js";
 export type { MCPError } from "./errors.js";
 

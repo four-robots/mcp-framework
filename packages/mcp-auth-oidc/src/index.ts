@@ -295,23 +295,46 @@ export class OIDCProvider extends OAuthProvider {
   }
 
   private async doFetchDiscovery(): Promise<void> {
-    if (!this.validateHttpsEndpoint(this.config.discoveryUrl!)) {
+    const primaryUrl = this.config.discoveryUrl!;
+    if (!this.validateHttpsEndpoint(primaryUrl)) {
       throw new Error('Discovery URL must use HTTPS in production');
     }
 
+    // Build list of URLs to try: primary URL first, then standard well-known endpoints
+    const urlsToTry = [primaryUrl];
     try {
-      const response = await this.fetchWithTimeout(this.config.discoveryUrl!);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch discovery document: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      this.discoveryCache = OIDCDiscoverySchema.parse(data);
-      this.discoveryCachedAt = Date.now();
-    } catch (error) {
-      console.error('Failed to fetch OIDC discovery:', error);
-      throw new Error(`Failed to fetch OIDC configuration: ${error instanceof Error ? error.message : String(error)}`);
+      const parsed = new URL(primaryUrl);
+      const baseOrigin = parsed.origin;
+      const oidcUrl = `${baseOrigin}/.well-known/openid-configuration`;
+      const oauthUrl = `${baseOrigin}/.well-known/oauth-authorization-server`;
+      if (!urlsToTry.includes(oidcUrl)) urlsToTry.push(oidcUrl);
+      if (!urlsToTry.includes(oauthUrl)) urlsToTry.push(oauthUrl);
+    } catch {
+      // If URL parsing fails, just use the primary URL
     }
+
+    const errors: string[] = [];
+    for (const url of urlsToTry) {
+      try {
+        const response = await this.fetchWithTimeout(url);
+        if (!response.ok) {
+          errors.push(`${url}: ${response.statusText}`);
+          continue;
+        }
+
+        const data = await response.json();
+        this.discoveryCache = OIDCDiscoverySchema.parse(data);
+        this.discoveryCachedAt = Date.now();
+        return; // Success
+      } catch (error) {
+        errors.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+    }
+
+    // All endpoints failed
+    console.error('Failed to fetch OIDC discovery from all endpoints:', errors);
+    throw new Error(`Failed to fetch OIDC configuration from any endpoint. Tried: ${urlsToTry.join(', ')}`);
   }
 
   /**

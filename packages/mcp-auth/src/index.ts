@@ -117,6 +117,26 @@ export interface ClientRegistrationResponse {
 }
 
 /**
+ * OAuth Client ID Metadata Document (RFC 7591 / MCP extension)
+ * Provides metadata about a registered client for discovery.
+ */
+export interface ClientMetadataDocument {
+  client_id: string;
+  client_name?: string;
+  client_uri?: string;
+  logo_uri?: string;
+  redirect_uris?: string[];
+  grant_types?: string[];
+  response_types?: string[];
+  scope?: string;
+  token_endpoint_auth_method?: string;
+  contacts?: string[];
+  tos_uri?: string;
+  policy_uri?: string;
+  [key: string]: any;
+}
+
+/**
  * Base authentication provider interface
  */
 export abstract class AuthProvider {
@@ -209,6 +229,14 @@ export abstract class OAuthProvider extends AuthProvider {
    */
   supportsDynamicRegistration?(): boolean {
     return false;
+  }
+
+  /**
+   * Optional: Retrieve client metadata document for a registered client.
+   * Implements OAuth Client ID Metadata Documents (RFC 7591 extension).
+   */
+  async getClientMetadata?(clientId: string): Promise<ClientMetadataDocument | null> {
+    return null;
   }
 
   // State storage for PKCE parameters (in-memory for single instance)
@@ -472,6 +500,23 @@ export function extractBearerToken(req: Request): string | null {
 }
 
 /**
+ * Error indicating insufficient scope for the requested operation.
+ * When thrown from an auth provider's authenticate method, the middleware
+ * will return a 403 with proper scope challenge headers.
+ */
+export class InsufficientScopeError extends Error {
+  readonly requiredScopes: string[];
+  readonly resourceMetadataUrl?: string;
+
+  constructor(requiredScopes: string[], resourceMetadataUrl?: string) {
+    super(`Insufficient scope. Required: ${requiredScopes.join(' ')}`);
+    this.name = 'InsufficientScopeError';
+    this.requiredScopes = requiredScopes;
+    this.resourceMetadataUrl = resourceMetadataUrl;
+  }
+}
+
+/**
  * Utility function to create auth middleware
  */
 export function createAuthMiddleware(provider: AuthProvider) {
@@ -483,7 +528,9 @@ export function createAuthMiddleware(provider: AuthProvider) {
         next();
       } else {
         // Set WWW-Authenticate header as required by OAuth 2.1
-        res.set('WWW-Authenticate', 'Bearer');
+        const baseUrl = getBaseUrl(req);
+        const wwwAuth = `Bearer realm="${baseUrl}", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`;
+        res.set('WWW-Authenticate', wwwAuth);
         const errorResponse = createOAuthError(
           'invalid_token',
           'Authentication required'
@@ -491,6 +538,21 @@ export function createAuthMiddleware(provider: AuthProvider) {
         res.status(401).json(errorResponse);
       }
     } catch (error) {
+      // Handle insufficient scope errors with proper 403 challenge
+      if (error instanceof InsufficientScopeError) {
+        const baseUrl = getBaseUrl(req);
+        const scopeStr = error.requiredScopes.join(' ');
+        const resourceMeta = error.resourceMetadataUrl || `${baseUrl}/.well-known/oauth-protected-resource`;
+        const wwwAuth = `Bearer realm="${baseUrl}", error="insufficient_scope", scope="${scopeStr}", resource_metadata="${resourceMeta}"`;
+        res.set('WWW-Authenticate', wwwAuth);
+        const errorResponse = createOAuthError(
+          'insufficient_scope',
+          `Required scopes: ${scopeStr}`
+        );
+        res.status(403).json(errorResponse);
+        return;
+      }
+
       console.error('Authentication error:', error);
       const errorResponse = createOAuthError(
         'server_error',
@@ -575,11 +637,35 @@ export function createOAuthDiscoveryRoutes(provider: OAuthProvider): Router {
     });
   }
   
+  // OAuth Client ID Metadata Documents (RFC 7591 extension)
+  if (provider.getClientMetadata) {
+    router.get('/.well-known/oauth-client/:clientId', async (req: Request, res: Response) => {
+      try {
+        const clientId = req.params.clientId;
+        if (!clientId) {
+          res.status(400).json(createOAuthError('invalid_request', 'Missing client_id parameter'));
+          return;
+        }
+
+        const metadata = await provider.getClientMetadata!(clientId);
+        if (!metadata) {
+          res.status(404).json(createOAuthError('invalid_client', 'Client not found'));
+          return;
+        }
+
+        res.json(metadata);
+      } catch (error) {
+        console.error('Client metadata lookup failed:', error);
+        res.status(500).json(createOAuthError('server_error', 'Failed to retrieve client metadata'));
+      }
+    });
+  }
+
   // Let provider setup additional routes (login, callback, etc.)
   if (provider.setupRoutes) {
     provider.setupRoutes(router);
   }
-  
+
   return router;
 }
 

@@ -6,7 +6,7 @@ import http from 'http';
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport, MCPServer, MCPErrorFactory, MCPErrorCode, formatMCPError } from "@tylercoles/mcp-server";
 import type { AuthProvider, User, OAuthProvider } from "@tylercoles/mcp-auth";
-import { createOAuthDiscoveryRoutes } from "@tylercoles/mcp-auth";
+import { createOAuthDiscoveryRoutes, InsufficientScopeError, createOAuthError } from "@tylercoles/mcp-auth";
 import { HttpRateLimitMiddleware, type HttpRateLimitConfig } from "@tylercoles/mcp-rate-limit";
 
 /**
@@ -19,6 +19,13 @@ export interface CorsConfig extends CorsOptions {
 /**
  * HTTP transport configuration
  */
+/**
+ * Supported MCP protocol versions
+ */
+export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26'] as const;
+export const DEFAULT_PROTOCOL_VERSION = '2025-03-26';
+export const LATEST_PROTOCOL_VERSION = '2025-06-18';
+
 export interface HttpConfig {
   host?: string;
   port: number;
@@ -34,6 +41,10 @@ export interface HttpConfig {
   externalDomain?: string; // External domain for OAuth callbacks
   rateLimit?: HttpRateLimitConfig; // Rate limiting configuration
   enableJsonResponse?: boolean; // Enable JSON responses instead of SSE streams
+  /** Whether to require MCP-Protocol-Version header (default: false for backwards compatibility) */
+  requireProtocolVersion?: boolean;
+  /** Supported protocol versions (default: all known versions) */
+  supportedProtocolVersions?: string[];
 }
 
 /**
@@ -159,7 +170,7 @@ export class HttpTransport implements Transport {
       const corsOptions: CorsOptions = {
         credentials: true,
         methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'mcp-session-id'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'mcp-session-id', 'MCP-Protocol-Version'],
         exposedHeaders: ['mcp-session-id'],
         ...this.config.cors
       };
@@ -203,6 +214,43 @@ export class HttpTransport implements Transport {
       const oauthRoutes = createOAuthDiscoveryRoutes(this.authProvider);
       this.app.use('/', oauthRoutes);
     }
+
+    // MCP-Protocol-Version header validation middleware
+    this.app.use(basePath, (req: Request, res: Response, next: any) => {
+      const protocolVersion = req.headers['mcp-protocol-version'] as string | undefined;
+      const supported = this.config.supportedProtocolVersions || [...SUPPORTED_PROTOCOL_VERSIONS];
+
+      if (protocolVersion) {
+        if (!supported.includes(protocolVersion)) {
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32600,
+              message: `Unsupported MCP-Protocol-Version: ${protocolVersion}. Supported: ${supported.join(', ')}`,
+            },
+            id: null,
+          });
+          return;
+        }
+        // Store the negotiated version on the request for downstream use
+        (req as any).mcpProtocolVersion = protocolVersion;
+      } else if (this.config.requireProtocolVersion) {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32600,
+            message: 'Missing required MCP-Protocol-Version header',
+          },
+          id: null,
+        });
+        return;
+      } else {
+        // Backwards compatibility: assume default version
+        (req as any).mcpProtocolVersion = DEFAULT_PROTOCOL_VERSION;
+      }
+
+      next();
+    });
 
     // Apply auth middleware if configured
     if (this.authProvider) {
@@ -372,12 +420,23 @@ export class HttpTransport implements Transport {
           // Return 401 with WWW-Authenticate header for MCP compliance
           const baseUrl = this.getBaseUrl(req);
           res.status(401)
-            .header('WWW-Authenticate', `Bearer realm="${baseUrl}", resource="${baseUrl}/.well-known/oauth-protected-resource"`)
-            .json({ error: 'Authentication required' });
+            .header('WWW-Authenticate', `Bearer realm="${baseUrl}", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`)
+            .json(createOAuthError('invalid_token', 'Authentication required'));
         }
       } catch (error) {
+        // Handle insufficient scope errors with proper 403 challenge
+        if (error instanceof InsufficientScopeError) {
+          const baseUrl = this.getBaseUrl(req);
+          const scopeStr = error.requiredScopes.join(' ');
+          const resourceMeta = error.resourceMetadataUrl || `${baseUrl}/.well-known/oauth-protected-resource`;
+          res.status(403)
+            .header('WWW-Authenticate', `Bearer realm="${baseUrl}", error="insufficient_scope", scope="${scopeStr}", resource_metadata="${resourceMeta}"`)
+            .json(createOAuthError('insufficient_scope', `Required scopes: ${scopeStr}`));
+          return;
+        }
+
         console.error('Authentication error:', error);
-        res.status(500).json({ error: 'Authentication failed' });
+        res.status(500).json(createOAuthError('server_error', 'Authentication failed'));
       }
     };
   }
