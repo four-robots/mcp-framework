@@ -715,5 +715,62 @@ export function createOAuthError(
   return errorResponse;
 }
 
+/**
+ * Parse a WWW-Authenticate header into its components.
+ * Handles Bearer scheme with realm, error, scope, and resource_metadata parameters.
+ */
+export function parseWWWAuthenticate(header: string): {
+  scheme: string;
+  realm?: string;
+  error?: string;
+  scope?: string;
+  resource_metadata?: string;
+  [key: string]: string | undefined;
+} {
+  const parts = header.trim().split(/\s+/);
+  const scheme = parts[0] || '';
+  const params: Record<string, string | undefined> = { scheme };
+
+  // Match key="value" or key=value pairs
+  const paramRegex = /(\w+)="([^"]*?)"|(\w+)=(\S+)/g;
+  const rest = header.substring(scheme.length);
+  let match: RegExpExecArray | null;
+  while ((match = paramRegex.exec(rest)) !== null) {
+    const key = match[1] || match[3];
+    const value = match[2] ?? match[4];
+    params[key] = value;
+  }
+
+  return params as any;
+}
+
+/**
+ * Extract insufficient scopes from a WWW-Authenticate header.
+ * Returns the required scopes when the error is 'insufficient_scope'.
+ */
+export function getInsufficientScopes(wwwAuthHeader: string): string[] | null {
+  const parsed = parseWWWAuthenticate(wwwAuthHeader);
+  if (parsed.error === 'insufficient_scope' && parsed.scope) {
+    return parsed.scope.split(/\s+/);
+  }
+  return null;
+}
+
+/**
+ * Resolve client metadata from a URL-based client_id.
+ * Fetches the client metadata document from the well-known endpoint.
+ */
+export async function resolveClientMetadata(clientId: string): Promise<ClientMetadataDocument | null> {
+  try {
+    const url = new URL(clientId);
+    const metadataUrl = `${url.origin}/.well-known/oauth-client/${encodeURIComponent(url.pathname.replace(/^\//, ''))}`;
+    const response = await fetch(metadataUrl);
+    if (!response.ok) return null;
+    return await response.json() as ClientMetadataDocument;
+  } catch {
+    return null;
+  }
+}
+
 // Re-export express for convenience
 export { express };
