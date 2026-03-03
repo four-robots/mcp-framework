@@ -54,7 +54,7 @@ describe('HttpMCPClient', () => {
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
         expect.any(URL),
-        { requestInit: { headers: { 'MCP-Protocol-Version': '2025-06-18', ...headers } } }
+        { requestInit: { headers: { 'MCP-Protocol-Version': '2025-11-25', ...headers } } }
       );
     });
 
@@ -65,7 +65,7 @@ describe('HttpMCPClient', () => {
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
         expect.any(URL),
-        { requestInit: { headers: { 'MCP-Protocol-Version': '2025-06-18' } } }
+        { requestInit: { headers: { 'MCP-Protocol-Version': '2025-11-25' } } }
       );
     });
   });

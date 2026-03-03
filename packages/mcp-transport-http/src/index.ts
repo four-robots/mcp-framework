@@ -22,9 +22,9 @@ export interface CorsConfig extends CorsOptions {
 /**
  * Supported MCP protocol versions
  */
-export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26'] as const;
+export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'] as const;
 export const DEFAULT_PROTOCOL_VERSION = '2025-03-26';
-export const LATEST_PROTOCOL_VERSION = '2025-06-18';
+export const LATEST_PROTOCOL_VERSION = '2025-11-25';
 
 export interface HttpConfig {
   host?: string;
@@ -251,6 +251,41 @@ export class HttpTransport implements Transport {
 
       next();
     });
+
+    // Origin header validation (MCP 2025-11-25: MUST return 403 for invalid Origin)
+    if (this.config.enableDnsRebindingProtection) {
+      this.app.use(basePath, (req: Request, res: Response, next: any) => {
+        const origin = req.headers['origin'];
+        if (origin) {
+          try {
+            const originHost = new URL(origin).hostname;
+            const allowed = this.config.allowedHosts || ['127.0.0.1', 'localhost'];
+            if (!allowed.includes(originHost)) {
+              res.status(403).json({
+                jsonrpc: '2.0',
+                error: {
+                  code: -32600,
+                  message: `Forbidden: Origin '${origin}' is not allowed`,
+                },
+                id: null,
+              });
+              return;
+            }
+          } catch {
+            res.status(403).json({
+              jsonrpc: '2.0',
+              error: {
+                code: -32600,
+                message: 'Forbidden: Invalid Origin header',
+              },
+              id: null,
+            });
+            return;
+          }
+        }
+        next();
+      });
+    }
 
     // Apply auth middleware if configured
     if (this.authProvider) {

@@ -163,21 +163,53 @@ export interface IEnhancedMCPClient extends IMCPClient {
    * Register an elicitation handler
    */
   registerElicitationHandler(handler: ElicitationHandler): () => void;
-  
+
+  /**
+   * Register a URL elicitation handler for mode:'url' flows
+   */
+  registerUrlElicitationHandler(handler: UrlElicitationHandler): () => void;
+
   /**
    * Handle elicitation request manually
    */
   handleElicitationRequest(request: ElicitationRequest): Promise<ElicitationResponse>;
-  
+
   /**
    * Validate elicitation form values
    */
   validateElicitationValues(fields: ElicitationField[], values: Record<string, any>): ElicitationValidationError[];
-  
+
   /**
    * Get active elicitation requests
    */
   getActiveElicitationRequests(): ElicitationRequest[];
+
+  // Task methods (MCP 2025-11-25 experimental)
+
+  /**
+   * Get task status by ID
+   */
+  getTask(taskId: string): Promise<TaskInfo>;
+
+  /**
+   * Get task result (tool call result)
+   */
+  getTaskResult(taskId: string): Promise<CallToolResult>;
+
+  /**
+   * List all tasks
+   */
+  listTasks(): Promise<TaskInfo[]>;
+
+  /**
+   * Cancel a task
+   */
+  cancelTask(taskId: string): Promise<TaskInfo>;
+
+  /**
+   * Poll a task until it reaches a terminal state and return the result
+   */
+  awaitTaskResult(taskId: string, options?: TaskPollingOptions): Promise<CallToolResult>;
 }
 
 /**
@@ -227,6 +259,8 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
   protected messageCallbacks: Set<MessageCallback> = new Set();
   protected activeRequests: Map<string, CancellationToken> = new Map();
   protected elicitationHandlers: Set<ElicitationHandler> = new Set();
+  protected urlElicitationHandlers: Set<UrlElicitationHandler> = new Set();
+  protected elicitationCompleteCallbacks: Map<string, (values?: Record<string, any>) => void> = new Map();
   protected activeElicitationRequests: Map<string, ElicitationRequest> = new Map();
   protected stats = {
     connectTime: undefined as Date | undefined,
@@ -564,10 +598,49 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
   }
 
   /**
+   * Register a URL elicitation handler
+   */
+  registerUrlElicitationHandler(handler: UrlElicitationHandler): () => void {
+    this.urlElicitationHandlers.add(handler);
+    return () => this.urlElicitationHandlers.delete(handler);
+  }
+
+  /**
+   * Register a one-time callback for when a URL elicitation completes
+   */
+  onElicitationComplete(elicitationId: string, callback: (values?: Record<string, any>) => void): void {
+    this.elicitationCompleteCallbacks.set(elicitationId, callback);
+  }
+
+  /**
    * Handle elicitation request manually
    */
   async handleElicitationRequest(request: ElicitationRequest): Promise<ElicitationResponse> {
-    // Validate request
+    // Handle URL-mode elicitation
+    if (request.mode === 'url' && request.url) {
+      for (const handler of this.urlElicitationHandlers) {
+        try {
+          const handled = await handler(request.url, request.elicitationId || request.id, request);
+          if (handled) {
+            // URL was opened for the user - return accept (completion comes via notification)
+            return {
+              id: request.id,
+              action: ElicitationAction.Accept,
+            };
+          }
+        } catch (error) {
+          console.error('URL elicitation handler failed:', error);
+        }
+      }
+      // No URL handler available
+      return {
+        id: request.id,
+        action: ElicitationAction.Decline,
+        reason: 'No URL elicitation handler available',
+      };
+    }
+
+    // Validate request for form mode
     if (!request.id || !request.title || !Array.isArray(request.fields)) {
       throw new Error('Invalid elicitation request format');
     }
@@ -809,7 +882,11 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
     for (const [name, prop] of Object.entries(schema.properties)) {
       let fieldType: ElicitationFieldType;
 
-      if (prop.enum) {
+      if (prop.type === 'array') {
+        fieldType = 'multiselect';
+      } else if (prop.oneOf) {
+        fieldType = 'select';
+      } else if (prop.enum) {
         fieldType = 'select';
       } else if (prop.format === 'email') {
         fieldType = 'email';
@@ -840,7 +917,18 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
       if (prop.pattern !== undefined) field.validation!.pattern = prop.pattern;
       if (prop.minimum !== undefined) field.validation!.min = prop.minimum;
       if (prop.maximum !== undefined) field.validation!.max = prop.maximum;
-      if (prop.enum) {
+      if (prop.oneOf) {
+        field.validation!.options = prop.oneOf.map(opt => ({
+          value: opt.const,
+          label: opt.title ?? String(opt.const),
+          description: opt.description,
+        }));
+      } else if (prop.type === 'array' && prop.items?.enum) {
+        field.validation!.options = prop.items.enum.map(value => ({
+          value,
+          label: String(value),
+        }));
+      } else if (prop.enum) {
         field.validation!.options = prop.enum.map((value, i) => ({
           value,
           label: prop.enumNames?.[i] ?? String(value),
@@ -920,8 +1008,50 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
           errors.push({ field: name, message: `${prop.title || name} must be at most ${prop.maximum}`, code: 'MAX_VALUE' });
         }
       }
-      if (prop.enum && !prop.enum.includes(value)) {
+      // String pattern validation
+      if (typeof value === 'string' && prop.pattern && prop.pattern.length <= 100) {
+        const hasNestedQuantifiers = /(\+|\*|\{)\s*\)(\+|\*|\?)|\(\?[^)]*(\+|\*)\)(\+|\*|\?)/.test(prop.pattern);
+        if (!hasNestedQuantifiers) {
+          try {
+            const regex = new RegExp(prop.pattern);
+            if (!regex.test(value)) {
+              errors.push({ field: name, message: `${prop.title || name} format is invalid`, code: 'INVALID_PATTERN' });
+            }
+          } catch {
+            // Invalid regex from server, skip
+          }
+        }
+      }
+      // oneOf validation (titled enums)
+      if (prop.oneOf) {
+        const validValues = prop.oneOf.map(opt => opt.const);
+        if (!validValues.includes(value)) {
+          errors.push({ field: name, message: `${prop.title || name} must be one of the allowed values`, code: 'INVALID_OPTION' });
+        }
+      } else if (prop.enum && !prop.enum.includes(value)) {
         errors.push({ field: name, message: `${prop.title || name} must be one of the allowed values`, code: 'INVALID_OPTION' });
+      }
+      // Array validation (multi-select)
+      if (prop.type === 'array') {
+        if (!Array.isArray(value)) {
+          errors.push({ field: name, message: `${prop.title || name} must be an array`, code: 'INVALID_TYPE' });
+        } else {
+          if (prop.minItems !== undefined && value.length < prop.minItems) {
+            errors.push({ field: name, message: `${prop.title || name} must have at least ${prop.minItems} items`, code: 'MIN_ITEMS' });
+          }
+          if (prop.maxItems !== undefined && value.length > prop.maxItems) {
+            errors.push({ field: name, message: `${prop.title || name} must have at most ${prop.maxItems} items`, code: 'MAX_ITEMS' });
+          }
+          if (prop.items?.enum) {
+            const validValues = prop.items.enum;
+            for (const item of value) {
+              if (!validValues.includes(item)) {
+                errors.push({ field: name, message: `${prop.title || name} contains invalid value: ${item}`, code: 'INVALID_OPTION' });
+                break;
+              }
+            }
+          }
+        }
       }
     }
 
@@ -932,8 +1062,41 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
    * Handle incoming elicitation requests from notifications
    */
   protected async handleElicitationNotification(notification: JSONRPCNotification): Promise<void> {
+    // Handle elicitation completion notifications (URL mode)
+    if (notification.method === 'notifications/elicitation/complete') {
+      const raw = notification.params as any;
+      const elicitationId = raw?.elicitationId;
+      if (elicitationId) {
+        const callback = this.elicitationCompleteCallbacks.get(elicitationId);
+        if (callback) {
+          this.elicitationCompleteCallbacks.delete(elicitationId);
+          callback(raw.values);
+        }
+      }
+      return;
+    }
+
     if (notification.method === 'notifications/elicitation/request') {
       const raw = notification.params as any;
+
+      // Handle URL-mode elicitation
+      if (raw.mode === 'url' && raw.url) {
+        const request: ElicitationRequest = {
+          id: raw.id || randomBytes(8).toString('hex'),
+          title: raw.message || raw.title || 'URL Interaction Required',
+          mode: 'url',
+          url: raw.url,
+          elicitationId: raw.elicitationId,
+          fields: [],
+          metadata: raw.metadata,
+        };
+        try {
+          await this.handleElicitationRequest(request);
+        } catch (error) {
+          console.error('Failed to handle URL elicitation:', error);
+        }
+        return;
+      }
 
       // Support JSON Schema format (MCP 2025-06-18) by converting to internal format
       let request: ElicitationRequest;
@@ -1045,6 +1208,92 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
     return [...this.roots];
   }
 
+  // ====================================================================
+  // Tasks (MCP 2025-11-25 experimental)
+  // ====================================================================
+
+  /**
+   * Get task status by ID
+   */
+  async getTask(taskId: string): Promise<TaskInfo> {
+    this.ensureConnected();
+    const client = this.getSDKClient();
+    const result = await client.request(
+      { method: 'tasks/get', params: { taskId } } as any,
+      {} as any
+    );
+    return result as TaskInfo;
+  }
+
+  /**
+   * Get the result of a completed task
+   */
+  async getTaskResult(taskId: string): Promise<CallToolResult> {
+    this.ensureConnected();
+    const client = this.getSDKClient();
+    const result = await client.request(
+      { method: 'tasks/result', params: { taskId } } as any,
+      {} as any
+    );
+    return result as CallToolResult;
+  }
+
+  /**
+   * List all tasks
+   */
+  async listTasks(): Promise<TaskInfo[]> {
+    this.ensureConnected();
+    const client = this.getSDKClient();
+    const result = await client.request(
+      { method: 'tasks/list', params: {} } as any,
+      {} as any
+    );
+    return (result as any).tasks || [];
+  }
+
+  /**
+   * Cancel a task
+   */
+  async cancelTask(taskId: string): Promise<TaskInfo> {
+    this.ensureConnected();
+    const client = this.getSDKClient();
+    const result = await client.request(
+      { method: 'tasks/cancel', params: { taskId } } as any,
+      {} as any
+    );
+    return result as TaskInfo;
+  }
+
+  /**
+   * Poll a task until it reaches a terminal state and return the result
+   */
+  async awaitTaskResult(taskId: string, options?: TaskPollingOptions): Promise<CallToolResult> {
+    const timeout = options?.timeout ?? 300000;
+    const startTime = Date.now();
+
+    let task = await this.getTask(taskId);
+    const pollInterval = options?.pollInterval ?? task.pollInterval ?? 1000;
+
+    while (!isTerminalTaskStatus(task.status)) {
+      if (Date.now() - startTime > timeout) {
+        throw new Error(`Task ${taskId} timed out after ${timeout}ms`);
+      }
+      options?.onStatusChange?.(task);
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      task = await this.getTask(taskId);
+    }
+    options?.onStatusChange?.(task);
+
+    if (task.status === 'failed') {
+      throw new Error(`Task ${taskId} failed: ${task.statusMessage || 'Unknown error'}`);
+    }
+    if (task.status === 'cancelled') {
+      throw new Error(`Task ${taskId} was cancelled`);
+    }
+
+    return this.getTaskResult(taskId);
+  }
+
   /**
    * Clean up resources
    */
@@ -1059,6 +1308,7 @@ export abstract class BaseMCPClient implements IEnhancedMCPClient {
     // progressCallbacks) which should persist across reconnections
     this.activeRequests.clear();
     this.activeElicitationRequests.clear();
+    this.elicitationCompleteCallbacks.clear();
   }
 }
 
@@ -1175,7 +1425,7 @@ export interface ElicitationField {
  * Restricted to flat objects with primitive properties only.
  */
 export interface ElicitationSchemaProperty {
-  type: 'string' | 'number' | 'integer' | 'boolean';
+  type: 'string' | 'number' | 'integer' | 'boolean' | 'array';
   title?: string;
   description?: string;
   default?: string | number | boolean;
@@ -1190,6 +1440,12 @@ export interface ElicitationSchemaProperty {
   // Enum
   enum?: (string | number | boolean)[];
   enumNames?: string[];
+  // Titled enum (oneOf with const/title)
+  oneOf?: Array<{ const: string | number | boolean; title?: string; description?: string }>;
+  // Array type (multi-select)
+  items?: { type: 'string' | 'number' | 'integer' | 'boolean'; enum?: (string | number | boolean)[] };
+  minItems?: number;
+  maxItems?: number;
 }
 
 /**
@@ -1215,6 +1471,12 @@ export interface ElicitationRequest {
   timeout?: number; // milliseconds
   allowCancel?: boolean;
   metadata?: Record<string, any>;
+  /** Elicitation mode: 'form' (default) or 'url' (redirect to external URL) */
+  mode?: 'form' | 'url';
+  /** URL to redirect user to when mode is 'url' */
+  url?: string;
+  /** Server-assigned elicitation ID for tracking URL-based flows */
+  elicitationId?: string;
 }
 
 /**
@@ -1242,6 +1504,44 @@ export interface ElicitationResponse {
  */
 export interface ElicitationHandler {
   (request: ElicitationRequest): Promise<ElicitationResponse>;
+}
+
+/**
+ * URL elicitation handler - invoked when mode is 'url'
+ * Should open the URL for the user and return true if handled
+ */
+export interface UrlElicitationHandler {
+  (url: string, elicitationId: string, request: ElicitationRequest): Promise<boolean>;
+}
+
+/**
+ * Task status values (MCP 2025-11-25 experimental)
+ */
+export type TaskStatus = 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * Task information returned from server
+ */
+export interface TaskInfo {
+  taskId: string;
+  status: TaskStatus;
+  statusMessage?: string;
+  createdAt: string;
+  lastUpdatedAt: string;
+  ttl: number | null;
+  pollInterval?: number;
+}
+
+/**
+ * Options for polling task results
+ */
+export interface TaskPollingOptions {
+  /** Polling interval in ms (default: uses server pollInterval or 1000) */
+  pollInterval?: number;
+  /** Maximum time to wait in ms (default: 300000 = 5 min) */
+  timeout?: number;
+  /** Callback for status updates */
+  onStatusChange?: (task: TaskInfo) => void;
 }
 
 /**
@@ -1471,6 +1771,13 @@ export class MultiServerMCPClient implements IMultiServerMCPClient {
 export interface MCPClientFactory<TConfig extends ClientConfig = ClientConfig> {
   create(config: TConfig): IMCPClient;
   createAndConnect(config: TConfig): Promise<IMCPClient>;
+}
+
+/**
+ * Check if a task status is terminal
+ */
+export function isTerminalTaskStatus(status: TaskStatus): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled';
 }
 
 // All types and classes are already exported where they are defined

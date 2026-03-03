@@ -12,9 +12,12 @@ import {
 import { z } from "zod";
 import { MCPErrorFactory, MCPErrorClass, MCPError, MCPErrorCode } from "./errors.js";
 import { SdkToolConfig, SdkToolResult } from "./tools.js";
+import { TaskManager, InMemoryTaskStore, isTerminal } from "./tasks.js";
+import type { Task, TaskStatus, TaskMetadata, TaskConfig, ToolExecution } from "./tasks.js";
 
 export * from './types.js';
 export * from './tools.js';
+export * from './tasks.js';
 
 /**
  * MCP Notification interfaces
@@ -442,6 +445,8 @@ export interface ToolConfig<Schema extends z.AnyZodObject = z.AnyZodObject> {
   annotations?: ToolAnnotations;
   /** Icons for display in UIs (MCP 2025-11-25) */
   icons?: Icon[];
+  /** Task execution support negotiation (MCP 2025-11-25) */
+  execution?: ToolExecution;
 }
 
 /**
@@ -451,6 +456,8 @@ export interface ResourceConfig {
   title?: string;
   description?: string;
   mimeType?: string;
+  /** Estimated size in bytes (MCP 2025-11-25) */
+  size?: number;
   /** Icons for display in UIs (MCP 2025-11-25) */
   icons?: Icon[];
 }
@@ -1062,6 +1069,8 @@ export interface ToolInfo<Schema extends z.AnyZodObject = z.AnyZodObject> {
   annotations?: ToolAnnotations;
   /** Icons for display in UIs (MCP 2025-11-25) */
   icons?: Icon[];
+  /** Task execution support negotiation (MCP 2025-11-25) */
+  execution?: ToolExecution;
 }
 
 /**
@@ -1073,6 +1082,8 @@ export interface ResourceInfo {
   title?: string;
   description?: string;
   mimeType?: string;
+  /** Estimated size in bytes (MCP 2025-11-25) */
+  size?: number;
   /** Icons for display in UIs (MCP 2025-11-25) */
   icons?: Icon[];
 }
@@ -1150,6 +1161,9 @@ export class MCPServer {
   private prompts: Map<string, PromptInfo> = new Map();
   private completionHandlers: Map<string, { config: CompletionConfig; handler: CompletionHandler }> = new Map();
   private samplingConfig: SamplingConfig | null = null;
+
+  // Task management (MCP 2025-11-25 experimental)
+  private taskManager: TaskManager | null = null;
 
   // Pagination management
   private cursorSecret: string;
@@ -1564,6 +1578,16 @@ export class MCPServer {
           this.requestTracer.endTrace(tracedContext, true, undefined, payloadSize);
           return result;
         } catch (error) {
+          // MCP 2025-11-25: Input validation errors should be returned as tool execution
+          // errors (isError: true) rather than protocol errors, to enable model self-correction.
+          if (error instanceof z.ZodError) {
+            const messages = error.errors.map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`).join('; ');
+            this.requestTracer.endTrace(tracedContext, false, 'validation_error');
+            return {
+              isError: true,
+              content: [{ type: 'text' as const, text: `Input validation error: ${messages}` }],
+            };
+          }
           const mcpError = MCPErrorFactory.fromError(error);
           this.requestTracer.endTrace(tracedContext, false, mcpError.code?.toString());
           throw mcpError;
@@ -1604,6 +1628,7 @@ export class MCPServer {
       title: config.title,
       description: config.description,
       mimeType: config.mimeType,
+      size: config.size,
       icons: config.icons,
     });
 
@@ -3014,6 +3039,34 @@ export class MCPServer {
         throw MCPErrorFactory.invalidParams(`Max tokens cannot exceed ${this.samplingConfig.maxTokensLimit}`);
       }
     }
+
+    // Validate tool definitions if provided (MCP 2025-11-25)
+    if (request.tools) {
+      if (!this.samplingConfig?.supportedToolCalling) {
+        throw MCPErrorFactory.invalidParams('Tool calling is not supported by this sampling configuration');
+      }
+      if (!Array.isArray(request.tools)) {
+        throw MCPErrorFactory.invalidParams('Tools must be an array');
+      }
+      for (const [i, tool] of request.tools.entries()) {
+        if (!tool.name || typeof tool.name !== 'string') {
+          throw MCPErrorFactory.invalidParams(`Tool at index ${i} must have a name string`);
+        }
+        if (!tool.inputSchema || tool.inputSchema.type !== 'object') {
+          throw MCPErrorFactory.invalidParams(`Tool '${tool.name}' must have an inputSchema with type 'object'`);
+        }
+      }
+    }
+
+    // Validate toolChoice if provided (MCP 2025-11-25)
+    if (request.toolChoice) {
+      if (!request.toolChoice.type || !['auto', 'none', 'tool'].includes(request.toolChoice.type)) {
+        throw MCPErrorFactory.invalidParams("toolChoice.type must be 'auto', 'none', or 'tool'");
+      }
+      if (request.toolChoice.type === 'tool' && !(request.toolChoice as any).name) {
+        throw MCPErrorFactory.invalidParams("toolChoice with type 'tool' must specify a tool name");
+      }
+    }
   }
 
   /**
@@ -3118,6 +3171,178 @@ export class MCPServer {
     }
 
     return this.handleSampling(request);
+  }
+
+  // ====================================================================
+  // Tasks (MCP 2025-11-25 Experimental)
+  // ====================================================================
+
+  /**
+   * Enable tasks support on this server.
+   * Registers handlers for tasks/get, tasks/result, tasks/list, tasks/cancel.
+   */
+  enableTasks(config?: TaskConfig): void {
+    this.taskManager = new TaskManager(config);
+
+    if (this.sdkServer.server && this.sdkServer.server.setRequestHandler) {
+      // tasks/get — poll for task status
+      this.sdkServer.server.setRequestHandler(
+        { method: 'tasks/get' } as any,
+        async (request: any) => {
+          const taskId = request.params?.taskId;
+          if (!taskId) throw MCPErrorFactory.invalidParams('taskId is required');
+          const task = this.taskManager!.getTask(taskId);
+          if (!task) throw MCPErrorFactory.resourceNotFound(`Task ${taskId}`);
+          return task;
+        }
+      );
+
+      // tasks/result — retrieve task result
+      this.sdkServer.server.setRequestHandler(
+        { method: 'tasks/result' } as any,
+        async (request: any) => {
+          const taskId = request.params?.taskId;
+          if (!taskId) throw MCPErrorFactory.invalidParams('taskId is required');
+          const task = this.taskManager!.getTask(taskId);
+          if (!task) throw MCPErrorFactory.resourceNotFound(`Task ${taskId}`);
+          if (!isTerminal(task.status)) {
+            return { task };
+          }
+          if (task.status === 'failed') {
+            const result = this.taskManager!.getResult(taskId);
+            return { task, error: result?.error || task.statusMessage };
+          }
+          const result = this.taskManager!.getResult(taskId);
+          return result ?? { task };
+        }
+      );
+
+      // tasks/list — paginated list of tasks
+      this.sdkServer.server.setRequestHandler(
+        { method: 'tasks/list' } as any,
+        async (request: any) => {
+          const tasks = this.taskManager!.listTasks();
+          const pageSize = Math.min(
+            this.paginationDefaults.maxPageSize,
+            request.params?.pageSize || this.paginationDefaults.defaultPageSize
+          );
+          let startIndex = 0;
+          if (request.params?.cursor) {
+            startIndex = parseInt(request.params.cursor, 10) || 0;
+          }
+          const page = tasks.slice(startIndex, startIndex + pageSize);
+          const nextCursor = startIndex + pageSize < tasks.length
+            ? String(startIndex + pageSize) : undefined;
+          return { tasks: page, nextCursor };
+        }
+      );
+
+      // tasks/cancel — cancel a running task
+      this.sdkServer.server.setRequestHandler(
+        { method: 'tasks/cancel' } as any,
+        async (request: any) => {
+          const taskId = request.params?.taskId;
+          if (!taskId) throw MCPErrorFactory.invalidParams('taskId is required');
+          const task = this.taskManager!.getTask(taskId);
+          if (!task) throw MCPErrorFactory.resourceNotFound(`Task ${taskId}`);
+          try {
+            const cancelled = this.taskManager!.cancelTask(taskId)!;
+            this.sendTaskStatusNotification(cancelled);
+            return cancelled;
+          } catch (error) {
+            throw MCPErrorFactory.invalidRequest(
+              error instanceof Error ? error.message : 'Cannot cancel task'
+            );
+          }
+        }
+      );
+    }
+  }
+
+  /**
+   * Check if tasks are enabled
+   */
+  isTasksEnabled(): boolean {
+    return this.taskManager !== null;
+  }
+
+  /**
+   * Get the task manager for direct access
+   */
+  getTaskManager(): TaskManager | null {
+    return this.taskManager;
+  }
+
+  /**
+   * Execute a tool asynchronously as a task.
+   * Creates a task, runs the tool in the background, and returns the task.
+   */
+  async executeToolAsTask(
+    toolName: string,
+    args: any,
+    taskMeta?: TaskMetadata,
+    context?: ToolContext
+  ): Promise<Task> {
+    if (!this.taskManager) {
+      throw MCPErrorFactory.invalidRequest('Tasks are not enabled on this server');
+    }
+    const toolInfo = this.tools.get(toolName);
+    if (!toolInfo) {
+      throw MCPErrorFactory.toolNotFound(toolName);
+    }
+    const taskSupport = toolInfo.execution?.taskSupport ?? 'optional';
+    if (taskSupport === 'forbidden') {
+      throw MCPErrorFactory.invalidRequest(`Tool '${toolName}' does not support task execution`);
+    }
+    const task = this.taskManager.createTask(taskMeta?.ttl);
+    this.executeToolAsyncForTask(toolName, args, task.taskId, context || this.getContext());
+    return task;
+  }
+
+  private async executeToolAsyncForTask(
+    toolName: string,
+    args: any,
+    taskId: string,
+    _context: ToolContext
+  ): Promise<void> {
+    try {
+      const result = await (this.sdkServer as any).callTool({
+        name: toolName,
+        arguments: args,
+      });
+      this.taskManager!.updateStatus(taskId, 'completed');
+      this.taskManager!.setResult(taskId, result);
+      this.sendTaskStatusNotification(this.taskManager!.getTask(taskId)!);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.taskManager!.updateStatus(taskId, 'failed', message);
+      this.taskManager!.setResult(taskId, { error: message });
+      const task = this.taskManager!.getTask(taskId);
+      if (task) this.sendTaskStatusNotification(task);
+    }
+  }
+
+  private sendTaskStatusNotification(task: Task): void {
+    try {
+      if (this.sdkServer.server) {
+        (this.sdkServer.server as any).notification({
+          method: 'notifications/tasks/status',
+          params: task,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send task status notification:', error);
+    }
+  }
+
+  /**
+   * Clean up task manager on server shutdown
+   */
+  destroyTasks(): void {
+    if (this.taskManager) {
+      this.taskManager.destroy();
+      this.taskManager = null;
+    }
   }
 
   // ====================================================================
@@ -3260,40 +3485,30 @@ export class MCPServer {
   }
 
   /**
-   * Send a URL-mode elicitation request to the connected client.
-   * The client should open the URL for the user to complete an action
-   * (e.g., OAuth consent, external approval).
-   *
-   * @param url - The URL the user should visit
-   * @param message - Human-readable description of why the URL visit is needed
-   * @returns The elicitation result with action
+   * Send a URL-mode elicitation request to the connected client (MCP 2025-11-25).
+   * The client should open the URL for the user to complete an out-of-band action
+   * (e.g., OAuth consent, payment processing, sensitive credential entry).
    */
   async sendUrlElicitationRequest(
     url: string,
     message: string,
+    elicitationId?: string,
   ): Promise<ElicitResult> {
     if (!this.sdkServer.server) {
       throw MCPErrorFactory.invalidRequest('Server is not connected');
     }
+
+    const id = elicitationId || randomBytes(16).toString('hex');
 
     try {
       const result = await (this.sdkServer.server as any).request(
         {
           method: 'elicitation/create',
           params: {
+            mode: 'url',
             message,
-            requestedSchema: {
-              type: 'object',
-              properties: {
-                _url: {
-                  type: 'string',
-                  format: 'uri',
-                  default: url,
-                  title: 'URL',
-                  description: `Please visit: ${url}`,
-                },
-              },
-            },
+            url,
+            elicitationId: id,
           },
         },
         ElicitResultSchema
@@ -3302,6 +3517,27 @@ export class MCPServer {
     } catch (error) {
       throw MCPErrorFactory.internalError(
         `URL elicitation request failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Send elicitation complete notification (MCP 2025-11-25).
+   * Notifies the client that an out-of-band URL elicitation has completed.
+   */
+  async sendElicitationComplete(elicitationId: string): Promise<void> {
+    if (!this.sdkServer.server) {
+      throw MCPErrorFactory.invalidRequest('Server is not connected');
+    }
+
+    try {
+      await (this.sdkServer.server as any).notification({
+        method: 'notifications/elicitation/complete',
+        params: { elicitationId },
+      });
+    } catch (error) {
+      throw MCPErrorFactory.internalError(
+        `Elicitation complete notification failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }

@@ -17,7 +17,10 @@ export enum MCPErrorCode {
   ServerError = -32000,
   ResourceNotFound = -32004,
   ToolNotFound = -32005,
-  PromptNotFound = -32006
+  PromptNotFound = -32006,
+
+  // MCP 2025-11-25 errors
+  UrlElicitationRequired = -32042
 }
 
 /**
@@ -220,7 +223,7 @@ export class UrlElicitationRequiredError extends MCPErrorClass {
 
   constructor(url: string, reason: string = 'User interaction required via URL') {
     super(
-      MCPErrorCode.ServerError,
+      MCPErrorCode.UrlElicitationRequired,
       reason,
       {
         type: 'url_elicitation_required',
